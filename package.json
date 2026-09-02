@@ -1,0 +1,28 @@
+{
+  "name": "throwtostay",
+  "version": "1.0.0",
+  "description": "ThrowToStay – Event-Fotobox: QR-Code scannen, Kamera-App öffnen, Fotos teilen. Fotos werden mit UUID auf dem Server gespeichert, Galerie-Freigabe am Folgetag ab 08:00 Uhr.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "start:https": "node src/server.js --https",
+    "test": "node test/smoke.mjs"
+  },
+  "keywords": [
+    "event",
+    "photobooth",
+    "qr-code",
+    "camera",
+    "gallery"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4"
+  }
+}

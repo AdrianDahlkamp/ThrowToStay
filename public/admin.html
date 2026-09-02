@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ThrowToStay – Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+  <meta name="theme-color" content="#0e1116">
+</head>
+<body>
+  <!-- Login -->
+  <div class="admin-login" id="loginBox">
+    <h1><span class="logo" style="font-size:30px">ThrowToStay</span></h1>
+    <p>Admin-Bereich – Events anlegen, Limits konfigurieren, QR-Codes verteilen.</p>
+    <form id="loginForm">
+      <div class="field">
+        <label for="pwInput">Passwort</label>
+        <input id="pwInput" type="password" required placeholder="Admin-Passwort" autocomplete="current-password">
+      </div>
+      <button class="btn" type="submit" style="width:100%">Anmelden</button>
+    </form>
+    <div class="error" id="loginError"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="admin-wrap" id="dashboard" style="display:none">
+    <div class="admin-head">
+      <div>
+        <div class="logo">ThrowToStay</div>
+        <div style="color:var(--text-dim);font-size:13.5px">Event-Verwaltung</div>
+      </div>
+      <button class="btn small secondary" id="logoutBtn" type="button">Abmelden</button>
+    </div>
+
+    <div class="create-card">
+      <h2>Neues Event anlegen</h2>
+      <form class="form-row" id="createForm">
+        <div class="field" style="flex:2 1 220px">
+          <label for="createName">Event-Name</label>
+          <input id="createName" type="text" maxlength="80" placeholder="z. B. Sommerfest 2026" required>
+        </div>
+        <div class="field">
+          <label for="createDate">Event-Datum</label>
+          <input id="createDate" type="date" required>
+        </div>
+        <div class="field" style="max-width:170px">
+          <label for="createLimit">Max. Fotos / User</label>
+          <input id="createLimit" type="number" min="1" max="1000" value="30">
+        </div>
+        <button class="btn" type="submit">Event erstellen</button>
+      </form>
+      <p class="admin-note">Die Session-ID wird automatisch generiert und ist Teil der QR-URL. Die Galerie wird am Folgetag um 08:00 Uhr freigeschaltet (anpassbar je Event).</p>
+    </div>
+
+    <div id="eventList"></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

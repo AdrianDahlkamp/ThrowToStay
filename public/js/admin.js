@@ -18,8 +18,8 @@
   const els = {
     loginBox: $('loginBox'), loginForm: $('loginForm'), pwInput: $('pwInput'),
     loginError: $('loginError'), dashboard: $('dashboard'), logoutBtn: $('logoutBtn'),
-    createForm: $('createForm'), createName: $('createName'), createDate: $('createDate'),
-    createLimit: $('createLimit'), eventList: $('eventList'), toast: $('toast'),
+    createForm: $('createForm'), createName: $('createName'),
+    eventList: $('eventList'), toast: $('toast'),
     keyForm: $('keyForm'), keyLabel: $('keyLabel'), keyList: $('keyList'),
   };
 
@@ -61,6 +61,34 @@
     return new Date(iso).toLocaleString('de-DE', {
       weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });
+  }
+
+  // Heutiges Datum als YYYY-MM-DD (Standard-Event-Datum beim Anlegen).
+  function todayStr() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  // Inline-SVG-Icons für die Button-Symbole (Feather-Style, Stroke = currentColor).
+  const ICONS = {
+    save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  };
+  function iconSvg(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '15');
+    svg.setAttribute('height', '15');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.innerHTML = ICONS[name];
+    return svg;
   }
 
   // ------------------------------------------------------------- Auth
@@ -143,9 +171,10 @@
     row1.appendChild(title);
 
     const delBtn = document.createElement('button');
-    delBtn.className = 'btn small danger';
+    delBtn.className = 'btn small danger icon-btn';
     delBtn.type = 'button';
-    delBtn.textContent = 'Event löschen';
+    delBtn.title = 'Event löschen';
+    delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
       if (!confirm(`Event "${e.name}" inkl. aller Fotos wirklich löschen?`)) return;
       try {
@@ -181,9 +210,10 @@
     urlInput.readOnly = true;
     urlInput.value = eventUrl(e);
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'btn small secondary';
+    copyBtn.className = 'btn small secondary icon-btn';
     copyBtn.type = 'button';
-    copyBtn.textContent = 'Kopieren';
+    copyBtn.title = 'Event-URL kopieren';
+    copyBtn.appendChild(iconSvg('copy'));
     copyBtn.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(eventUrl(e));
@@ -198,10 +228,11 @@
     share.appendChild(urlLine);
 
     const dlQr = document.createElement('button');
-    dlQr.className = 'btn small secondary';
+    dlQr.className = 'btn small secondary icon-btn';
     dlQr.type = 'button';
     dlQr.style.marginTop = '10px';
-    dlQr.textContent = 'QR-Code herunterladen';
+    dlQr.title = 'QR-Code herunterladen (PNG)';
+    dlQr.appendChild(iconSvg('download'));
     dlQr.addEventListener('click', async () => {
       const blob = await api(`/events/${e.id}/qr.png`);
       const url = URL.createObjectURL(blob);
@@ -238,7 +269,7 @@
 
     const fLimit = document.createElement('div');
     fLimit.className = 'field';
-    fLimit.innerHTML = '<label>Max. Fotos pro User</label>';
+    fLimit.innerHTML = '<label class="tip" data-tip="Maximale Anzahl an Fotos, die ein einzelner Gast bei diesem Event speichern kann. Standard: 30.">Max. Fotos pro User</label>';
     const limitInput = document.createElement('input');
     limitInput.type = 'number';
     limitInput.min = '1';
@@ -248,7 +279,7 @@
 
     const fSide = document.createElement('div');
     fSide.className = 'field';
-    fSide.innerHTML = '<label>Max. Bildgröße (px, längste Seite)</label>';
+    fSide.innerHTML = '<label class="tip" data-tip="Längste Seite des gespeicherten Fotos in Pixeln. Höher = mehr Detail, aber deutlich größere Dateien. Standard: 1600, Maximum: 4096.">Max. Bildgröße (px, längste Seite)</label>';
     const sideInput = document.createElement('input');
     sideInput.type = 'number';
     sideInput.min = '640';
@@ -258,7 +289,7 @@
 
     const fQuality = document.createElement('div');
     fQuality.className = 'field';
-    fQuality.innerHTML = '<label>JPEG-Qualität (%)</label>';
+    fQuality.innerHTML = '<label class="tip" data-tip="JPEG-Komprimierung in Prozent. 100 = beste Qualität (größte Dateien), 50 = starke Komprimierung. Standard: 92.">JPEG-Qualität (%)</label>';
     const qualityInput = document.createElement('input');
     qualityInput.type = 'number';
     qualityInput.min = '50';
@@ -268,30 +299,72 @@
 
     const fUnlock = document.createElement('div');
     fUnlock.className = 'field';
-    fUnlock.innerHTML = `<label>Galerie-Freigabe (Standard: Folgetag 08:00)</label>`;
+    fUnlock.innerHTML = '<label class="tip" data-tip="Zeitpunkt, ab dem alle Gäste die gemeinsame Galerie aller Fotos sehen. Standard: Folgetag um 08:00 Uhr.">Galerie-Freigabe</label>';
     const unlockInput = document.createElement('input');
     unlockInput.type = 'datetime-local';
     unlockInput.value = toLocalInputValue(e.galleryUnlockAt);
     fUnlock.appendChild(unlockInput);
 
-    settingsGrid.append(fName, fDate);
-    settings.appendChild(settingsGrid);
+    // Tabs: Basis-Einstellungen / Expert-Einstellungen
+    const tabBar = document.createElement('div');
+    tabBar.className = 'tabs';
+    const tabBasic = document.createElement('button');
+    tabBasic.className = 'tab active';
+    tabBasic.type = 'button';
+    tabBasic.textContent = 'Einstellungen';
+    const tabExpert = document.createElement('button');
+    tabExpert.className = 'tab';
+    tabExpert.type = 'button';
+    tabExpert.textContent = 'Expert-Einstellungen';
+    tabBar.append(tabBasic, tabExpert);
 
-    const expert = document.createElement('details');
-    expert.className = 'expert';
-    const expertSummary = document.createElement('summary');
-    expertSummary.textContent = 'Expert-Einstellungen (Foto-Limit, Bildqualität, Galerie-Freigabe)';
-    expert.appendChild(expertSummary);
+    const panelBasic = document.createElement('div');
+    panelBasic.className = 'tab-panel active';
+    settingsGrid.append(fName, fDate);
+    panelBasic.appendChild(settingsGrid);
+
+    const panelExpert = document.createElement('div');
+    panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-grid';
     expertGrid.append(fLimit, fSide, fQuality, fUnlock);
-    expert.appendChild(expertGrid);
-    settings.appendChild(expert);
+    panelExpert.appendChild(expertGrid);
+
+    const usersBtn = document.createElement('button');
+    usersBtn.className = 'btn small secondary';
+    usersBtn.type = 'button';
+    usersBtn.textContent = 'Teilnehmer anzeigen';
+    usersBtn.title = 'Debug: Teilnehmerliste inkl. UUID und Fotoanzahl';
+    usersBtn.addEventListener('click', async () => {
+      try {
+        const data = await api(`/events/${e.id}/users`);
+        renderUsersPanel(usersPanel, data.users);
+        usersPanel.classList.toggle('visible', true);
+        usersBtn.textContent = usersPanel.classList.contains('visible') ? 'Teilnehmer verbergen' : 'Teilnehmer anzeigen';
+      } catch (err) { toast(err.message, true); }
+    });
+    panelExpert.appendChild(usersBtn);
+
+    const usersPanel = document.createElement('div');
+    usersPanel.className = 'users-panel';
+    panelExpert.appendChild(usersPanel);
+
+    const switchTab = which => {
+      tabBasic.classList.toggle('active', which === 'basic');
+      tabExpert.classList.toggle('active', which === 'expert');
+      panelBasic.classList.toggle('active', which === 'basic');
+      panelExpert.classList.toggle('active', which === 'expert');
+    };
+    tabBasic.addEventListener('click', () => switchTab('basic'));
+    tabExpert.addEventListener('click', () => switchTab('expert'));
+
+    settings.append(tabBar, panelBasic, panelExpert);
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'btn small';
+    saveBtn.className = 'btn small icon-btn';
     saveBtn.type = 'button';
-    saveBtn.textContent = 'Einstellungen speichern';
+    saveBtn.title = 'Einstellungen speichern';
+    saveBtn.appendChild(iconSvg('save'));
     saveBtn.addEventListener('click', async () => {
       const patch = {
         name: nameInput.value.trim(),
@@ -314,7 +387,7 @@
     nowBtn.className = 'btn small secondary';
     nowBtn.type = 'button';
     nowBtn.style.marginLeft = '8px';
-    nowBtn.textContent = e.galleryUnlocked ? 'Galerie sperren' : 'Jetzt freigeben';
+    nowBtn.textContent = e.galleryUnlocked ? 'Galerie sperren' : 'Galerie vorab freigeben';
     nowBtn.addEventListener('click', async () => {
       if (e.galleryUnlocked) {
         // Sperren = Freigabe weit in die Zukunft setzen
@@ -349,27 +422,10 @@
       } catch (err) { toast(err.message, true); } finally { exportBtn.disabled = false; }
     });
 
-    const usersBtn = document.createElement('button');
-    usersBtn.className = 'btn small secondary';
-    usersBtn.type = 'button';
-    usersBtn.textContent = 'Teilnehmer anzeigen';
-    usersBtn.addEventListener('click', async () => {
-      try {
-        const data = await api(`/events/${e.id}/users`);
-        renderUsersPanel(panel, data.users);
-        panel.classList.toggle('visible', true);
-        usersBtn.textContent = panel.classList.contains('visible') ? 'Teilnehmer verbergen' : 'Teilnehmer anzeigen';
-      } catch (err) { toast(err.message, true); }
-    });
-
     const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:6px';
-    btnRow.append(saveBtn, nowBtn, exportBtn, usersBtn);
+    btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:14px';
+    btnRow.append(saveBtn, nowBtn, exportBtn);
     settings.appendChild(btnRow);
-
-    const panel = document.createElement('div');
-    panel.className = 'users-panel';
-    settings.appendChild(panel);
 
     grid.appendChild(settings);
     card.appendChild(grid);
@@ -415,12 +471,11 @@
   els.createForm.addEventListener('submit', async ev => {
     ev.preventDefault();
     const name = els.createName.value.trim();
-    const date = els.createDate.value;
-    if (!name || !date) return;
+    if (!name) return;
     try {
       const data = await api('/events', {
         method: 'POST',
-        body: { name, eventDate: date, maxPhotosPerUser: parseInt(els.createLimit.value, 10) || 30 },
+        body: { name, eventDate: todayStr() },
       });
       els.createName.value = '';
       toast(`Event "${data.event.name}" erstellt – Session-ID: ${data.event.sessionId}`);
@@ -532,10 +587,6 @@
   // ------------------------------------------------------------- Init
 
   (async function init() {
-    // Default-Datum: heute
-    const today = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    els.createDate.value = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
     if (!token) { els.loginBox.style.display = 'block'; return; }
     try {
       await api('/events');

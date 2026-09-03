@@ -83,28 +83,34 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 
 ### Admin (`/admin`)
 
-1. Mit `ADMIN_PASSWORD` anmelden.
+1. Mit `ADMIN_PASSWORD` anmelden. (Die Startseite `/` leitet zum Veranstalter-Login
+   weiter – der Admin-Bereich liegt unter `/admin`.)
 2. Event anlegen: **nur den Namen eingeben** – das Datum wird automatisch auf heute
-   gesetzt, das Foto-Limit auf 30 (Standard). Datum und Foto-Limit sind optional in
-   den aufklappbaren **Expert-Einstellungen** änderbar.
+   gesetzt, das Foto-Limit auf 30 (Standard). Es gibt hier bewusst keine
+   Expert-Einstellungen; die werden erst je Event angepasst.
 3. **Zugangs-Schlüssel für Veranstalter generieren** (mit Bezeichnung, z. B. Vereinsname)
    – Veranstalter melden sich damit unter `/organizer` an und verwalten ihre eigenen
    Events. Schlüssel sind sperbar (Login/Token sofort ungültig) und löschbar (nur
    solange keine Events zugeordnet sind).
-4. QR-Code + Event-URL pro Event anzeigen, kopieren oder als PNG herunterladen.
-5. Einstellungen je Event: Name und Datum direkt sichtbar; Foto-Limit, **max.
-   Bildgröße (px, längste Seite)**, **JPEG-Qualität (%)** und Freigabe-Zeitpunkt
-   der Galerie (Standard: Folgetag 08:00 Uhr) in den aufklappbaren
-   **Expert-Einstellungen**. Buttons „Jetzt freigeben“ / „Galerie sperren“.
-6. Teilnehmerliste mit UUID + Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos
-   beider Varianten inkl. `manifest.csv` und `users.csv` herunter.
+4. QR-Code + Event-URL pro Event anzeigen, kopieren (Kopieren-Icon) oder als PNG
+   herunterladen (Download-Icon).
+5. Einstellungen je Event in zwei **Tabs**: „Einstellungen“ (Name, Datum) und
+   „Expert-Einstellungen“ (Foto-Limit, **max. Bildgröße (px, längste Seite)**,
+   **JPEG-Qualität (%)**, Galerie-Freigabe). Alle vier Expert-Felder tragen einen
+   **Tooltip** mit Erklärung. Speichern = Disketten-Icon, „Galerie vorab freigeben“
+   / „Galerie sperren“ schaltet die Freigabe.
+6. „Teilnehmer anzeigen“ (Debug, im Expert-Tab) zeigt die Teilnehmerliste mit UUID +
+   Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos beider Varianten inkl.
+   `manifest.csv` und `users.csv` herunter.
 
 ### Veranstalter (`/organizer`)
 
 Mit Zugangs-Schlüssel anmelden → eigene Events anlegen und verwalten (QR-Code, Limits,
 Bildqualität, Freigabe, Teilnehmerliste, Export). Einfacher Workflow: Event-Name
 eingeben → Event entsteht mit Datum = heute und Standard-Limit 30, der QR-Code ist
-sofort verfügbar. Keine Schlüssel-Verwaltung, keine fremden Events sichtbar.
+sofort verfügbar. Einstellungen je Event liegen in zwei Tabs („Einstellungen“ /
+„Expert-Einstellungen“), identisch zum Admin-Panel. Keine Schlüssel-Verwaltung,
+keine fremden Events sichtbar.
 
 ### Gäste (`/e/<SESSION-ID>`)
 

@@ -251,6 +251,85 @@ async function main() {
   const exportBuf = Buffer.from(await exportRes.arrayBuffer());
   check('Admin-Export ZIP OK (Fotos + manifest + users)', exportRes.ok && countZipEntries(exportBuf) >= 5, `gefunden: ${countZipEntries(exportBuf)}`);
 
+  console.log('\n— Bildkomprimierung konfigurierbar (Issue 1) —');
+  const patchImg = await fetch(BASE + `/api/admin/events/${event.id}`, {
+    method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ maxImageSide: 2048, jpegQuality: 88 }),
+  });
+  const patchedImg = (await patchImg.json()).event;
+  check('Auflösung & JPEG-Qualität per Admin einstellbar', patchImg.ok && patchedImg.maxImageSide === 2048 && patchedImg.jpegQuality === 88);
+  const stateQ = await (await fetch(BASE + `/api/e/${event.sessionId}/state`)).json();
+  check('Gast-State enthält Bildeinstellungen', stateQ.event.maxImageSide === 2048 && stateQ.event.jpegQuality === 88);
+  const badImg = await fetch(BASE + `/api/admin/events/${event.id}`, {
+    method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jpegQuality: 10 }),
+  });
+  const badImgData = await badImg.json();
+  check('JPEG-Qualität wird auf Minimum 50% begrenzt', badImg.ok && badImgData.event.jpegQuality === 50);
+
+  console.log('\n— Rollen: Veranstalter-Keys (Issue 2) —');
+  const keyRes = await fetch(BASE + '/api/admin/keys', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: 'SV Test' }),
+  });
+  const { key: accessKey } = await keyRes.json();
+  check('Admin generiert Zugangs-Schlüssel', keyRes.status === 201 && /^TTS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/.test(accessKey.key), accessKey.key);
+
+  const orgLogin = await fetch(BASE + '/api/organizer/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: accessKey.key.toLowerCase() }),
+  });
+  const orgData = await orgLogin.json();
+  check('Veranstalter-Login mit Schlüssel (Groß-/Kleinschreibung egal)', orgLogin.ok && !!orgData.token);
+  const orgAuth = { Authorization: 'Bearer ' + orgData.token };
+
+  const badKeyLogin = await fetch(BASE + '/api/organizer/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'TTS-0000-0000' }),
+  });
+  check('Unbekannter Schlüssel → 401', badKeyLogin.status === 401);
+
+  const orgCreate = await fetch(BASE + '/api/organizer/events', {
+    method: 'POST', headers: { ...orgAuth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Org-Event', eventDate: today, maxPhotosPerUser: 5, maxImageSide: 2400, jpegQuality: 95 }),
+  });
+  const { event: orgEvent } = await orgCreate.json();
+  check('Veranstalter kann Event mit Bildeinstellungen anlegen', orgCreate.status === 201 && orgEvent.maxImageSide === 2400 && orgEvent.jpegQuality === 95);
+
+  const orgList = await (await fetch(BASE + '/api/organizer/events', { headers: orgAuth })).json();
+  check('Veranstalter sieht nur eigene Events', orgList.events.length === 1 && orgList.events[0].id === orgEvent.id);
+
+  const adminList2 = await (await fetch(BASE + '/api/admin/events', { headers: auth })).json();
+  check('Admin sieht alle Events inkl. Ersteller-Bezeichnung',
+    adminList2.events.some(e => e.id === orgEvent.id && e.createdByLabel === 'SV Test') &&
+    adminList2.events.some(e => e.id === event.id && !e.createdByLabel));
+
+  const orgPatchForeign = await fetch(BASE + `/api/organizer/events/${event.id}`, {
+    method: 'PATCH', headers: { ...orgAuth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Gehackt' }),
+  });
+  check('Veranstalter kann fremdes Event nicht ändern → 404', orgPatchForeign.status === 404);
+
+  const orgTryAdmin = await fetch(BASE + '/api/admin/events', { headers: orgAuth });
+  check('Veranstalter-Token gilt nicht für Admin-API → 401', orgTryAdmin.status === 401);
+
+  const orgQr = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/qr.png?token=${encodeURIComponent(orgData.token)}`);
+  check('Veranstalter-QR-Code auslieferbar (?token=)', orgQr.ok && (await orgQr.arrayBuffer()).byteLength > 100);
+
+  const revokeRes = await fetch(BASE + `/api/admin/keys/${accessKey.id}`, {
+    method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ revoked: true }),
+  });
+  check('Schlüssel sperren', revokeRes.ok);
+
+  const orgLoginRevoked = await fetch(BASE + '/api/organizer/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: accessKey.key }),
+  });
+  check('Gesperrter Schlüssel → Login 401', orgLoginRevoked.status === 401);
+  const orgEventsRevoked = await fetch(BASE + '/api/organizer/events', { headers: orgAuth });
+  check('Gesperrter Schlüssel → bestehender Token abgelehnt', orgEventsRevoked.status === 401);
+
   console.log(`\nErgebnis: ${passed} bestanden, ${failed} fehlgeschlagen`);
   if (failed > 0) process.exitCode = 1;
 }

@@ -279,6 +279,15 @@ state.track = null;
     }
   }
 
+  /** Vom Event konfigurierte Bildqualität (Admin-Panel). */
+  function imageSettings() {
+    const e = state.event || {};
+    return {
+      maxSide: Math.min(Math.max(parseInt(e.maxImageSide, 10) || 1600, 640), 4096),
+      quality: Math.min(Math.max(parseInt(e.jpegQuality, 10) || 92, 50), 100) / 100,
+    };
+  }
+
   async function capture() {
     if (state.captureBusy || !state.user) return;
     const video = els.video;
@@ -306,12 +315,13 @@ state.track = null;
 
     try {
       const zoomArg = state.zoomMode === 'digital' ? state.zoom : 1;
-      const originalCanvas = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', 1600, zoomArg);
-      const originalBlob = await window.TTSFilters.canvasToBlob(originalCanvas);
+      const { maxSide, quality } = imageSettings();
+      const originalCanvas = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', maxSide, zoomArg);
+      const originalBlob = await window.TTSFilters.canvasToBlob(originalCanvas, quality);
       let filteredBlob = null;
       if (takenWithFilter) {
-        const fc = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, filterId, 1600, zoomArg);
-        filteredBlob = await window.TTSFilters.canvasToBlob(fc);
+        const fc = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, filterId, maxSide, zoomArg);
+        filteredBlob = await window.TTSFilters.canvasToBlob(fc, quality);
       }
       queueUpload({ originalBlob, filteredBlob, filterId, takenWithFilter });
     } catch (err) {
@@ -729,7 +739,7 @@ state.track = null;
       const bitmap = await createImageBitmap(blob);
       const canvas = window.TTSFilters.captureToCanvas(bitmap, bitmap.width, bitmap.height, filterId);
       bitmap.close();
-      const filteredBlob = await window.TTSFilters.canvasToBlob(canvas);
+      const filteredBlob = await window.TTSFilters.canvasToBlob(canvas, imageSettings().quality);
 
       const fd = new FormData();
       fd.set('uuid', state.uuid);

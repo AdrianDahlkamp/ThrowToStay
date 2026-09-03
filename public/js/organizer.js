@@ -1,32 +1,26 @@
 'use strict';
 
 /**
- * ThrowToStay – Admin-Panel (Frontend-Logik).
+ * ThrowToStay – Veranstalter-Panel (Frontend-Logik).
  *
- * Funktionen:
- *  - Login mit ADMIN_PASSWORD (Token im LocalStorage).
- *  - Events anlegen/löschen, Foto-Limit pro User konfigurieren (Standard 30),
- *    Bildauflösung und JPEG-Qualität je Event einstellen.
- *  - Zugangs-Schlüssel für Veranstalter generieren, sperren und löschen.
- *  - QR-Code + teilbare URL je Event anzeigen.
- *  - Galerie-Freigabe je Event steuern (Standard: Folgetag 08:00 Uhr, überschreibbar).
- *  - Teilnehmerliste einsehen, kompletten Export als ZIP herunterladen.
+ * Veranstalter melden sich mit einem vom Admin generierten Zugangs-Schlüssel
+ * an und können eigene Events anlegen und verwalten (QR-Code, Limits,
+ * Bildqualität, Galerie-Freigabe, Teilnehmer, Export).
  */
 
 (function () {
   const $ = id => document.getElementById(id);
   const els = {
-    loginBox: $('loginBox'), loginForm: $('loginForm'), pwInput: $('pwInput'),
+    loginBox: $('loginBox'), loginForm: $('loginForm'), keyInput: $('keyInput'),
     loginError: $('loginError'), dashboard: $('dashboard'), logoutBtn: $('logoutBtn'),
+    orgLabel: $('orgLabel'),
     createForm: $('createForm'), createName: $('createName'), createDate: $('createDate'),
     createLimit: $('createLimit'), eventList: $('eventList'), toast: $('toast'),
-    keyForm: $('keyForm'), keyLabel: $('keyLabel'), keyList: $('keyList'),
   };
 
-  const TOKEN_KEY = 'tts_admin_token';
+  const TOKEN_KEY = 'tts_organizer_token';
   let token = localStorage.getItem(TOKEN_KEY) || '';
   let events = [];
-  let keys = [];
 
   // ------------------------------------------------------------- Helfer
 
@@ -36,11 +30,11 @@
       opts.body = JSON.stringify(opts.body);
       opts.headers['Content-Type'] = 'application/json';
     }
-    return fetch('/api/admin' + path, opts).then(async res => {
+    return fetch('/api/organizer' + path, opts).then(async res => {
       if (!res.ok) {
         let msg = 'Serverfehler (' + res.status + ')';
         try { const j = await res.json(); if (j.error) msg = j.error; } catch { /* ignore */ }
-        if (res.status === 401) { logout(false); }
+        if (res.status === 401) logout(false);
         throw new Error(msg);
       }
       const ct = res.headers.get('content-type') || '';
@@ -63,6 +57,12 @@
     });
   }
 
+  function toLocalInputValue(iso) {
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   // ------------------------------------------------------------- Auth
 
   function logout(clearToken = true) {
@@ -76,17 +76,17 @@
     ev.preventDefault();
     els.loginError.textContent = '';
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await fetch('/api/organizer/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: els.pwInput.value }),
+        body: JSON.stringify({ key: els.keyInput.value }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Login fehlgeschlagen.');
       const data = await res.json();
       token = data.token;
       localStorage.setItem(TOKEN_KEY, token);
-      els.pwInput.value = '';
-      showDashboard();
+      els.keyInput.value = '';
+      showDashboard(data.organizer && data.organizer.label);
     } catch (err) {
       els.loginError.textContent = err.message;
     }
@@ -96,10 +96,11 @@
 
   // ------------------------------------------------------------- Dashboard
 
-  async function showDashboard() {
+  async function showDashboard(label) {
     els.loginBox.style.display = 'none';
     els.dashboard.style.display = 'block';
-    await Promise.all([loadEvents(), loadKeys()]);
+    els.orgLabel.textContent = label ? ` · ${label}` : '';
+    await loadEvents();
   }
 
   async function loadEvents() {
@@ -112,7 +113,6 @@
     }
   }
 
-  // Event-URL: gleicher Origin wie das Admin-Panel.
   function eventUrl(e) {
     return `${location.origin}/e/${e.sessionId}`;
   }
@@ -131,15 +131,13 @@
     const card = document.createElement('div');
     card.className = 'event-card';
 
-    // Kopfzeile
     const row1 = document.createElement('div');
     row1.className = 'row1';
     const title = document.createElement('div');
     title.innerHTML = `<h3></h3><div class="meta"></div>`;
     title.querySelector('h3').textContent = e.name;
     title.querySelector('.meta').textContent =
-      `Event-Datum: ${new Date(e.eventDate + 'T00:00:00').toLocaleDateString('de-DE')} · Session-ID: ${e.sessionId}` +
-      (e.createdByLabel ? ` · Erstellt von: ${e.createdByLabel}` : '');
+      `Event-Datum: ${new Date(e.eventDate + 'T00:00:00').toLocaleDateString('de-DE')} · Session-ID: ${e.sessionId}`;
     row1.appendChild(title);
 
     const delBtn = document.createElement('button');
@@ -171,7 +169,7 @@
     const qr = document.createElement('img');
     qr.className = 'qr-img';
     qr.alt = 'QR-Code';
-    qr.src = `/api/admin/events/${e.id}/qr.png?token=${encodeURIComponent(token)}`;
+    qr.src = `/api/organizer/events/${e.id}/qr.png?token=${encodeURIComponent(token)}`;
     share.appendChild(qr);
 
     const urlLine = document.createElement('div');
@@ -220,59 +218,18 @@
     const settingsGrid = document.createElement('div');
     settingsGrid.className = 'settings-grid';
 
-    const fName = document.createElement('div');
-    fName.className = 'field';
-    fName.innerHTML = '<label>Event-Name</label>';
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.value = e.name;
-    fName.appendChild(nameInput);
-
-    const fDate = document.createElement('div');
-    fDate.className = 'field';
-    fDate.innerHTML = '<label>Event-Datum</label>';
-    const dateInput = document.createElement('input');
-    dateInput.type = 'date';
-    dateInput.value = e.eventDate;
-    fDate.appendChild(dateInput);
-
-    const fLimit = document.createElement('div');
-    fLimit.className = 'field';
-    fLimit.innerHTML = '<label>Max. Fotos pro User</label>';
-    const limitInput = document.createElement('input');
-    limitInput.type = 'number';
-    limitInput.min = '1';
-    limitInput.max = '1000';
-    limitInput.value = e.maxPhotosPerUser;
-    fLimit.appendChild(limitInput);
-
-    const fSide = document.createElement('div');
-    fSide.className = 'field';
-    fSide.innerHTML = '<label>Max. Bildgröße (px, längste Seite)</label>';
-    const sideInput = document.createElement('input');
-    sideInput.type = 'number';
-    sideInput.min = '640';
-    sideInput.max = '4096';
-    sideInput.value = e.maxImageSide;
-    fSide.appendChild(sideInput);
-
-    const fQuality = document.createElement('div');
-    fQuality.className = 'field';
-    fQuality.innerHTML = '<label>JPEG-Qualität (%)</label>';
-    const qualityInput = document.createElement('input');
-    qualityInput.type = 'number';
-    qualityInput.min = '50';
-    qualityInput.max = '100';
-    qualityInput.value = e.jpegQuality;
-    fQuality.appendChild(qualityInput);
-
-    const fUnlock = document.createElement('div');
-    fUnlock.className = 'field';
-    fUnlock.innerHTML = `<label>Galerie-Freigabe (Standard: Folgetag 08:00)</label>`;
-    const unlockInput = document.createElement('input');
-    unlockInput.type = 'datetime-local';
-    unlockInput.value = toLocalInputValue(e.galleryUnlockAt);
-    fUnlock.appendChild(unlockInput);
+    const fName = mkField('Event-Name', 'text', e.name);
+    const fDate = mkField('Event-Datum', 'date', e.eventDate);
+    const fLimit = mkField('Max. Fotos pro User', 'number', e.maxPhotosPerUser);
+    fLimit.querySelector('input').min = '1';
+    fLimit.querySelector('input').max = '1000';
+    const fSide = mkField('Max. Bildgröße (längste Seite, px)', 'number', e.maxImageSide);
+    fSide.querySelector('input').min = '640';
+    fSide.querySelector('input').max = '4096';
+    const fQuality = mkField('JPEG-Qualität (%)', 'number', e.jpegQuality);
+    fQuality.querySelector('input').min = '50';
+    fQuality.querySelector('input').max = '100';
+    const fUnlock = mkField('Galerie-Freigabe (Standard: Folgetag 08:00)', 'datetime-local', toLocalInputValue(e.galleryUnlockAt));
 
     settingsGrid.append(fName, fDate, fLimit, fSide, fQuality, fUnlock);
     settings.appendChild(settingsGrid);
@@ -283,15 +240,13 @@
     saveBtn.textContent = 'Einstellungen speichern';
     saveBtn.addEventListener('click', async () => {
       const patch = {
-        name: nameInput.value.trim(),
-        eventDate: dateInput.value,
-        maxPhotosPerUser: parseInt(limitInput.value, 10),
-        maxImageSide: parseInt(sideInput.value, 10),
-        jpegQuality: parseInt(qualityInput.value, 10),
+        name: val(fName).trim(),
+        eventDate: val(fDate),
+        maxPhotosPerUser: parseInt(val(fLimit), 10),
+        maxImageSide: parseInt(val(fSide), 10),
+        jpegQuality: parseInt(val(fQuality), 10),
       };
-      if (unlockInput.value) {
-        patch.galleryUnlockAt = new Date(unlockInput.value).toISOString();
-      }
+      if (val(fUnlock)) patch.galleryUnlockAt = new Date(val(fUnlock)).toISOString();
       try {
         await api('/events/' + e.id, { method: 'PATCH', body: patch });
         toast('Einstellungen gespeichert.');
@@ -302,23 +257,16 @@
     const nowBtn = document.createElement('button');
     nowBtn.className = 'btn small secondary';
     nowBtn.type = 'button';
-    nowBtn.style.marginLeft = '8px';
     nowBtn.textContent = e.galleryUnlocked ? 'Galerie sperren' : 'Jetzt freigeben';
     nowBtn.addEventListener('click', async () => {
-      if (e.galleryUnlocked) {
-        // Sperren = Freigabe weit in die Zukunft setzen
-        try {
-          await api('/events/' + e.id, { method: 'PATCH', body: { galleryUnlockAt: new Date(Date.now() + 3650 * 864e5).toISOString() } });
-          toast('Galerie gesperrt.');
-          loadEvents();
-        } catch (err) { toast(err.message, true); }
-      } else {
-        try {
-          await api('/events/' + e.id, { method: 'PATCH', body: { galleryUnlockAt: 'now' } });
-          toast('Galerie freigegeben.');
-          loadEvents();
-        } catch (err) { toast(err.message, true); }
-      }
+      const body = e.galleryUnlocked
+        ? { galleryUnlockAt: new Date(Date.now() + 3650 * 864e5).toISOString() }
+        : { galleryUnlockAt: 'now' };
+      try {
+        await api('/events/' + e.id, { method: 'PATCH', body });
+        toast(e.galleryUnlocked ? 'Galerie gesperrt.' : 'Galerie freigegeben.');
+        loadEvents();
+      } catch (err) { toast(err.message, true); }
     });
 
     const exportBtn = document.createElement('button');
@@ -365,6 +313,21 @@
     return card;
   }
 
+  function mkField(label, type, value) {
+    const f = document.createElement('div');
+    f.className = 'field';
+    const l = document.createElement('label');
+    l.textContent = label;
+    const input = document.createElement('input');
+    input.type = type;
+    if (value !== undefined && value !== null) input.value = value;
+    f.append(l, input);
+    return f;
+  }
+  function val(field) {
+    return field.querySelector('input').value;
+  }
+
   function renderUsersPanel(panel, users) {
     panel.innerHTML = '';
     if (!users.length) {
@@ -373,7 +336,7 @@
     }
     const table = document.createElement('table');
     table.className = 'users-table';
-    table.innerHTML = '<thead><tr><th>Name</th><th>Fotos</th><th>UUID</th><th>Registriert</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>Name</th><th>Fotos</th><th>Registriert</th></tr></thead>';
     const tbody = document.createElement('tbody');
     for (const u of users) {
       const tr = document.createElement('tr');
@@ -381,22 +344,13 @@
       tdName.textContent = `${u.firstName} ${u.lastName}`;
       const tdCount = document.createElement('td');
       tdCount.textContent = String(u.photoCount);
-      const tdUuid = document.createElement('td');
-      tdUuid.className = 'mono';
-      tdUuid.textContent = u.uuid;
       const tdAt = document.createElement('td');
       tdAt.textContent = fmtDateTime(u.registeredAt);
-      tr.append(tdName, tdCount, tdUuid, tdAt);
+      tr.append(tdName, tdCount, tdAt);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     panel.appendChild(table);
-  }
-
-  function toLocalInputValue(iso) {
-    const d = new Date(iso);
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   // ------------------------------------------------------------- Event erstellen
@@ -419,118 +373,18 @@
     }
   });
 
-  // ------------------------------------------------------------- Veranstalter-Keys
-
-  async function loadKeys() {
-    try {
-      const data = await api('/keys');
-      keys = data.keys;
-      renderKeys();
-    } catch (err) {
-      if (token) toast(err.message, true);
-    }
-  }
-
-  function renderKeys() {
-    const list = els.keyList;
-    list.innerHTML = '';
-    if (!keys.length) {
-      list.innerHTML = '<div class="empty-state" style="padding:16px">Noch keine Schlüssel generiert.</div>';
-      return;
-    }
-    const table = document.createElement('table');
-    table.className = 'users-table';
-    table.innerHTML = '<thead><tr><th>Bezeichnung</th><th>Schlüssel</th><th>Events</th><th>Status</th><th>Aktionen</th></tr></thead>';
-    const tbody = document.createElement('tbody');
-    for (const k of keys) {
-      const tr = document.createElement('tr');
-
-      const tdLabel = document.createElement('td');
-      tdLabel.textContent = k.label || '—';
-
-      const tdKey = document.createElement('td');
-      tdKey.className = 'mono';
-      tdKey.textContent = k.key;
-
-      const tdCount = document.createElement('td');
-      tdCount.textContent = String(k.eventCount);
-
-      const tdStatus = document.createElement('td');
-      tdStatus.textContent = k.revoked ? 'gesperrt' : 'aktiv';
-      tdStatus.style.color = k.revoked ? 'var(--danger)' : 'var(--ok)';
-
-      const tdActions = document.createElement('td');
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'btn small secondary';
-      copyBtn.type = 'button';
-      copyBtn.textContent = 'Kopieren';
-      copyBtn.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(k.key);
-          toast('Schlüssel kopiert.');
-        } catch { toast(k.key); }
-      });
-
-      const revokeBtn = document.createElement('button');
-      revokeBtn.className = 'btn small secondary';
-      revokeBtn.type = 'button';
-      revokeBtn.style.marginLeft = '6px';
-      revokeBtn.textContent = k.revoked ? 'Entsperren' : 'Sperren';
-      revokeBtn.addEventListener('click', async () => {
-        try {
-          await api(`/keys/${k.id}`, { method: 'PATCH', body: { revoked: !k.revoked } });
-          toast(k.revoked ? 'Schlüssel entsperrt.' : 'Schlüssel gesperrt.');
-          loadKeys();
-        } catch (err) { toast(err.message, true); }
-      });
-
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn small danger';
-      delBtn.type = 'button';
-      delBtn.style.marginLeft = '6px';
-      delBtn.textContent = 'Löschen';
-      delBtn.addEventListener('click', async () => {
-        if (!confirm(`Schlüssel ${k.key} wirklich löschen?`)) return;
-        try {
-          await api(`/keys/${k.id}`, { method: 'DELETE' });
-          toast('Schlüssel gelöscht.');
-          loadKeys();
-        } catch (err) { toast(err.message, true); }
-      });
-
-      tdActions.append(copyBtn, revokeBtn, delBtn);
-      tr.append(tdLabel, tdKey, tdCount, tdStatus, tdActions);
-      tbody.appendChild(tr);
-    }
-    table.appendChild(tbody);
-    list.appendChild(table);
-  }
-
-  els.keyForm.addEventListener('submit', async ev => {
-    ev.preventDefault();
-    try {
-      const data = await api('/keys', { method: 'POST', body: { label: els.keyLabel.value.trim() } });
-      els.keyLabel.value = '';
-      toast(`Schlüssel generiert: ${data.key.key}`);
-      loadKeys();
-    } catch (err) {
-      toast(err.message, true);
-    }
-  });
-
   // ------------------------------------------------------------- Init
 
   (async function init() {
-    // Default-Datum: heute
     const today = new Date();
     const pad = n => String(n).padStart(2, '0');
     els.createDate.value = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
     if (!token) { els.loginBox.style.display = 'block'; return; }
     try {
       await api('/events');
-      showDashboard();
+      showDashboard('');
     } catch {
-      logout(false); // Token ungültig → Login zeigen
+      logout(false);
       els.loginBox.style.display = 'block';
     }
   })();

@@ -4,10 +4,14 @@
  * Datenbank-Layer für ThrowToStay (node:sqlite, eingebautes SQLite).
  *
  * Tabellen:
- *  - events:  Event mit Session-ID (Teil der QR-URL), Datum, Foto-Limit pro User,
- *             Zeitpunkt der Galerie-Freigabe (Standard: Folgetag 08:00 Uhr).
- *  - users:   Teilnehmer pro Event (UUID aus dem Browser-LocalStorage + Name).
- *  - photos:  Metadaten jedes Fotos; Dateien liegen unter data/photos/<session>/<uuid>/.
+ *  - events:    Event mit Session-ID (Teil der QR-URL), Datum, Foto-Limit pro User,
+ *               Bild-Einstellungen (Auflösung/JPEG-Qualität), Zeitpunkt der
+ *               Galerie-Freigabe (Standard: Folgetag 08:00 Uhr) und
+ *               created_by = ID des Veranstalter-Keys (null = vom Admin angelegt).
+ *  - user_keys: Vom Admin generierte Zugangs-Schlüssel für Veranstalter ("User"),
+ *               die damit eigene Events anlegen können.
+ *  - users:     Gäste pro Event (UUID aus dem Browser-LocalStorage + Name).
+ *  - photos:    Metadaten jedes Fotos; Dateien liegen unter data/photos/<session>/<uuid>/.
  */
 
 const path = require('path');
@@ -22,7 +26,18 @@ CREATE TABLE IF NOT EXISTS events (
   event_date          TEXT NOT NULL,
   max_photos_per_user INTEGER NOT NULL DEFAULT 30,
   gallery_unlock_at   TEXT NOT NULL,
-  created_at          TEXT NOT NULL
+  created_at          TEXT NOT NULL,
+  created_by          TEXT,
+  max_image_side      INTEGER NOT NULL DEFAULT 1600,
+  jpeg_quality        INTEGER NOT NULL DEFAULT 92
+);
+
+CREATE TABLE IF NOT EXISTS user_keys (
+  id         TEXT PRIMARY KEY,
+  key        TEXT NOT NULL UNIQUE,
+  label      TEXT NOT NULL DEFAULT '',
+  revoked    INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -51,6 +66,20 @@ CREATE INDEX IF NOT EXISTS idx_photos_user  ON photos(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_event  ON users(event_id);
 `;
 
+/** Spalten-Nachrüstung für Bestandsdatenbanken (Migration ohne Migrationstool). */
+function ensureColumns(db) {
+  const cols = db.prepare('PRAGMA table_info(events)').all().map(c => c.name);
+  if (!cols.includes('created_by')) {
+    db.exec('ALTER TABLE events ADD COLUMN created_by TEXT');
+  }
+  if (!cols.includes('max_image_side')) {
+    db.exec('ALTER TABLE events ADD COLUMN max_image_side INTEGER NOT NULL DEFAULT 1600');
+  }
+  if (!cols.includes('jpeg_quality')) {
+    db.exec('ALTER TABLE events ADD COLUMN jpeg_quality INTEGER NOT NULL DEFAULT 92');
+  }
+}
+
 function openDb(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(path.join(dataDir, 'photos'), { recursive: true });
@@ -60,6 +89,7 @@ function openDb(dataDir) {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  ensureColumns(db);
   return db;
 }
 

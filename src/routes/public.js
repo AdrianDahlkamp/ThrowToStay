@@ -64,6 +64,8 @@ function createPublicRouter({ db, dataDir }) {
         name: event.name,
         eventDate: event.event_date,
         maxPhotosPerUser: event.max_photos_per_user,
+        maxImageSide: event.max_image_side,
+        jpegQuality: event.jpeg_quality,
         galleryUnlockAt: event.gallery_unlock_at,
         galleryUnlocked: unlocked,
       },

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>ThrowToStay – Admin</title>
+  <title>ThrowToStay – Veranstalter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -11,27 +11,27 @@
   <meta name="theme-color" content="#0e1116">
 </head>
 <body>
-  <!-- Login -->
+  <!-- Login mit Schlüssel -->
   <div class="admin-login" id="loginBox">
     <h1><span class="logo" style="font-size:30px">ThrowToStay</span></h1>
-    <p>Admin-Bereich – Events anlegen, Limits konfigurieren, QR-Codes verteilen.</p>
+    <p>Veranstalter-Login – gib den Zugangsschlüssel ein, den du vom Admin erhalten hast, um Events zu erstellen.</p>
     <form id="loginForm">
       <div class="field">
-        <label for="pwInput">Passwort</label>
-        <input id="pwInput" type="password" required placeholder="Admin-Passwort" autocomplete="current-password">
+        <label for="keyInput">Zugangs-Schlüssel</label>
+        <input id="keyInput" type="text" required placeholder="z. B. TTS-4F9K-M2QX" autocomplete="off" style="text-transform:uppercase">
       </div>
       <button class="btn" type="submit" style="width:100%">Anmelden</button>
     </form>
     <div class="error" id="loginError"></div>
-    <p class="admin-note" style="margin-top:14px"><a href="/organizer" style="color:var(--accent)">Veranstalter mit Schlüssel? Hier einloggen</a></p>
+    <p class="admin-note" style="margin-top:14px"><a href="/admin" style="color:var(--accent)">Admin? Hier anmelden</a></p>
   </div>
 
-  <!-- Dashboard -->
+  <!-- Veranstalter-Dashboard -->
   <div class="admin-wrap" id="dashboard" style="display:none">
     <div class="admin-head">
       <div>
         <div class="logo">ThrowToStay</div>
-        <div style="color:var(--text-dim);font-size:13.5px">Event-Verwaltung</div>
+        <div style="color:var(--text-dim);font-size:13.5px">Veranstalter-Bereich<span id="orgLabel"></span></div>
       </div>
       <button class="btn small secondary" id="logoutBtn" type="button">Abmelden</button>
     </div>
@@ -56,24 +56,11 @@
       <p class="admin-note">Die Session-ID wird automatisch generiert und ist Teil der QR-URL. Die Galerie wird am Folgetag um 08:00 Uhr freigeschaltet (anpassbar je Event).</p>
     </div>
 
-    <div class="create-card">
-      <h2>Zugangs-Schlüssel für Veranstalter</h2>
-      <form class="form-row" id="keyForm">
-        <div class="field" style="flex:2 1 220px">
-          <label for="keyLabel">Bezeichnung (z. B. Name oder Verein)</label>
-          <input id="keyLabel" type="text" maxlength="60" placeholder="z. B. SV Sommerfest">
-        </div>
-        <button class="btn" type="submit">Schlüssel generieren</button>
-      </form>
-      <div id="keyList" style="margin-top:14px"></div>
-      <p class="admin-note">Schlüsselberechtigte Veranstalter können unter <a href="/organizer" style="color:var(--accent)">/organizer</a> eigene Events anlegen und verwalten.</p>
-    </div>
-
     <div id="eventList"></div>
   </div>
 
   <div id="toast"></div>
 
-  <script src="/js/admin.js"></script>
+  <script src="/js/organizer.js"></script>
 </body>
 </html>

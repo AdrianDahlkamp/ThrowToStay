@@ -15,6 +15,12 @@ gemeinsame Galerie aller Gäste.
   (zusaätzlich als `manifest.csv` in jedem ZIP-Export).
 - **Foto-Limit**: Standardmäßig max. 30 Fotos pro Gast – pro Event konfigurierbar im
   Admin-Panel.
+- **Bildqualität konfigurierbar**: Auflösung (längste Seite, Standard 1600 px) und
+  JPEG-Qualität (Standard 92 %) sind je Event im Admin-/Veranstalter-Panel einstellbar.
+- **Drei Rollen**: **Admin** (Passwort, volle Kontrolle inkl. Schlüsselverwaltung),
+  **Veranstalter** („User“ – meldet sich mit einem vom Admin generierten
+  Zugangs-Schlüssel unter `/organizer` an und kann eigene Events anlegen/verwalten) und
+  **Gast** (scannt den QR-Code und macht Fotos).
 - **Galerie-Freigabe**: Vor der Freigabe sieht jeder Gast nur die eigenen Fotos. Am
   Folgetag um 08:00 Uhr (berechnet aus dem Event-Datum, manuell überschreibbar) sieht
   jeder Gast die gesamte Galerie aller Gäste des Events.
@@ -79,11 +85,22 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 
 1. Mit `ADMIN_PASSWORD` anmelden.
 2. Event anlegen: Name, Event-Datum, max. Fotos pro Gast (Standard 30).
-3. QR-Code + Event-URL pro Event anzeigen, kopieren oder als PNG herunterladen.
-4. Einstellungen je Event: Name, Datum, Foto-Limit, Freigabe-Zeitpunkt der Galerie
-   (Standard: Folgetag 08:00 Uhr; Buttons „Jetzt freigeben“ / „Galerie sperren“).
-5. Teilnehmerliste mit UUID + Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos
+3. **Zugangs-Schlüssel für Veranstalter generieren** (mit Bezeichnung, z. B. Vereinsname)
+   – Veranstalter melden sich damit unter `/organizer` an und verwalten ihre eigenen
+   Events. Schlüssel sind sperbar (Login/Token sofort ungültig) und löschbar (nur
+   solange keine Events zugeordnet sind).
+4. QR-Code + Event-URL pro Event anzeigen, kopieren oder als PNG herunterladen.
+5. Einstellungen je Event: Name, Datum, Foto-Limit, **max. Bildgröße (px, längste
+   Seite)** und **JPEG-Qualität (%)**, Freigabe-Zeitpunkt der Galerie (Standard:
+   Folgetag 08:00 Uhr; Buttons „Jetzt freigeben“ / „Galerie sperren“).
+6. Teilnehmerliste mit UUID + Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos
    beider Varianten inkl. `manifest.csv` und `users.csv` herunter.
+
+### Veranstalter (`/organizer`)
+
+Mit Zugangs-Schlüssel anmelden → eigene Events anlegen und verwalten (QR-Code, Limits,
+Bildqualität, Freigabe, Teilnehmerliste, Export). Keine Schlüssel-Verwaltung, keine
+fremden Events sichtbar.
 
 ### Gäste (`/e/<SESSION-ID>`)
 
@@ -99,17 +116,20 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 ## Architektur
 
 ```
-src/server.js          Express-Server (HTTP/HTTPS, statisches Frontend, Fehlerbehandlung)
-src/db.js              SQLite-Schema (events, users, photos) via node:sqlite
-src/util.js            Session-IDs, Freigabe-Berechnung, Admin-Token, Upload-Sniffing
-src/routes/public.js   Event-API: State/Registrierung, Upload, Galerie, Datei-Auslieferung,
-                       Re-Filter, Sammel-Download-ZIP
-src/routes/admin.js    Admin-API: Login, Events-CRUD, QR-Codes, Export, Teilnehmer
-public/event.html + js/event.js   Kamera-App & Galerie
-public/admin.html + js/admin.js   Admin-Panel
-public/js/filters.js   Throwaway-Filter (CSS-Livevorschau + Canvas-Pipeline)
-public/css/app.css     Gemeinsames Styling
-test/smoke.mjs         Smoke-Tests aller Kernabläufe (npm test)
+src/server.js               Express-Server (HTTP/HTTPS, statisches Frontend, Fehlerbehandlung)
+src/db.js                   SQLite-Schema (events, user_keys, users, photos) via node:sqlite
+src/util.js                 Session-IDs, Zugangs-Schlüssel, Freigabe-Berechnung, Tokens
+src/routes/public.js        Event-API: State/Registrierung, Upload, Galerie, Datei-Auslieferung,
+                            Re-Filter, Sammel-Download-ZIP
+src/routes/admin.js         Admin-API: Login, Events-CRUD, Veranstalter-Keys, QR, Export
+src/routes/organizer.js     Veranstalter-API: Login mit Schlüssel, eigene Events verwalten
+src/routes/event-helpers.js Geteilte Event-Logik (Anlegen/Aktualisieren/Löschen)
+public/event.html + js/event.js             Kamera-App & Galerie
+public/admin.html + js/admin.js             Admin-Panel (inkl. Schlüssel-Verwaltung)
+public/organizer.html + js/organizer.js     Veranstalter-Panel
+public/js/filters.js        Einweg-Kamera-Filter (CSS-Livevorschau + Canvas-Pipeline)
+public/css/app.css          Gemeinsames Styling
+test/smoke.mjs              Smoke-Tests aller Kernabläufe (npm test)
 ```
 
 Die Foto-Dateien liegen bewusst als UUID-Pfadstruktur auf der Platte:
@@ -123,8 +143,9 @@ npm test
 
 Prüft: Admin-Login, Event-Erstellung, QR-Auslieferung, Registrierung, Upload beider
 Varianten (inkl. UUID-Ordner auf der Platte), Galerie-Sperre vor Freigabe, Re-Filter
-(Besitzer vs. Fremde), konfigurierbares Foto-Limit pro User, Freigabe-Logik,
-Sammel-Download-ZIP und Admin-Export.
+(Besitzer vs. Fremde), konfigurierbares Foto-Limit pro User, konfigurierbare
+Bildkomprimierung, Veranstalter-Keys (Anlegen, Login, Isolation, Sperren),
+Freigabe-Logik, Sammel-Download-ZIP und Admin-Export.
 
 ## Bekannte Grenzen
 

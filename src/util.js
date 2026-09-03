@@ -19,6 +19,14 @@ function generateSessionId() {
   return out;
 }
 
+/** Zugangs-Schlüssel für Veranstalter, z. B. "TTS-4F9K-M2QX" (8 Zeichen ≈ 40 Bit). */
+function generateAccessKey() {
+  const bytes = crypto.randomBytes(8);
+  let out = '';
+  for (const b of bytes) out += SESSION_ALPHABET[b % SESSION_ALPHABET.length];
+  return `TTS-${out.slice(0, 4)}-${out.slice(4, 8)}`;
+}
+
 function generateId() {
   return crypto.randomUUID();
 }
@@ -94,6 +102,26 @@ function verifyAdminToken(secret, token) {
   return crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Veranstalter-Session-Token: "<keyId>.<hmac>", ohne Datenbank-Treffer
+ * verifizierbar (ob der Key gesperrt ist, wird je Request in der DB geprüft).
+ */
+function createOrganizerToken(secret, keyId) {
+  const mac = crypto.createHmac('sha256', secret).update(`organizer-v1:${keyId}`).digest('hex');
+  return `${keyId}.${mac}`;
+}
+
+function verifyOrganizerToken(secret, token) {
+  if (typeof token !== 'string' || !token.includes('.')) return null;
+  const [keyId, mac] = token.split('.');
+  if (!keyId || !mac) return null;
+  const expected = crypto.createHmac('sha256', secret).update(`organizer-v1:${keyId}`).digest('hex');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(mac));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return keyId;
+}
+
 /** Verhindert Path-Traversal: nur unsere eigenen generierten Dateinamen zulassen. */
 function isSafeStoredFilename(name) {
   return typeof name === 'string' && /^[A-Za-z0-9._-]+$/.test(name) && !name.includes('..');
@@ -101,6 +129,7 @@ function isSafeStoredFilename(name) {
 
 module.exports = {
   generateSessionId,
+  generateAccessKey,
   generateId,
   nowIso,
   computeGalleryUnlockAt,
@@ -110,5 +139,7 @@ module.exports = {
   loadOrCreateAdminSecret,
   createAdminToken,
   verifyAdminToken,
+  createOrganizerToken,
+  verifyOrganizerToken,
   isSafeStoredFilename,
 };

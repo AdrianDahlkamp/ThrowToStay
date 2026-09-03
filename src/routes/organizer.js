@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * Admin-API: Events anlegen/verwalten, Zugangs-Schlüssel für Veranstalter
- * generieren, QR-Codes erzeugen, Limits und Bildkomprimierung konfigurieren,
- * Galerie-Freigabe steuern, Teilnehmer einsehen und alles exportieren.
+ * Veranstalter-API ("User"-Rolle): Veranstalter erhalten vom Admin einen
+ * Zugangs-Schlüssel (z. B. "TTS-4F9K-M2QX") und können damit eigene Events
+ * anlegen und verwalten – ohne Admin-Rechte (keine Key-Verwaltung, keine
+ * fremden Events).
  *
- * Auth: Passwort (ENV ADMIN_PASSWORD) gegen einen HMAC-Session-Token,
- * der als Bearer-Header ODER als ?token=-Parameter (für <img>/QR) akzeptiert wird.
+ * Auth: Login mit Schlüssel → HMAC-Session-Token (Bearer-Header oder ?token=).
  */
 
 const express = require('express');
@@ -16,11 +16,11 @@ const archiver = require('archiver');
 const util = require('../util');
 const helpers = require('./event-helpers');
 
-function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
+function createOrganizerRouter({ db, dataDir, adminSecret }) {
   const router = express.Router();
   const photosRoot = path.join(dataDir, 'photos');
 
-  // ------------------------------------------------------------- Auth-Check
+  // ------------------------------------------------------------- Auth
 
   function tokenFromReq(req) {
     const auth = req.get('authorization') || '';
@@ -28,45 +28,52 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     return req.query.token;
   }
 
-  // Mini-Rate-Limit für Fehlversuche beim Login.
-  const loginFails = new Map(); // ip -> { count, blockedUntil }
-
-  function requireAdmin(req, res, next) {
-    if (util.verifyAdminToken(adminSecret, tokenFromReq(req))) return next();
-    res.status(401).json({ error: 'Nicht angemeldet.' });
+  /** Token verifizieren und zugehörigen Key laden (null = ungültig). */
+  function authenticate(token) {
+    const keyId = util.verifyOrganizerToken(adminSecret, token);
+    if (!keyId) return null;
+    const k = db.prepare('SELECT * FROM user_keys WHERE id = ?').get(keyId);
+    if (!k || k.revoked) return null;
+    return k;
   }
 
   router.post('/login', express.json(), (req, res) => {
-    const ip = req.ip || 'unbekannt';
-    const entry = loginFails.get(ip) || { count: 0, blockedUntil: 0 };
-    if (Date.now() < entry.blockedUntil) {
-      return res.status(429).json({ error: 'Zu viele Fehlversuche. Bitte kurz warten.' });
-    }
-    const password = String((req.body || {}).password || '');
-    if (password !== adminPassword) {
-      entry.count += 1;
-      if (entry.count >= 5) {
-        entry.blockedUntil = Date.now() + 60_000;
-        entry.count = 0;
-      }
-      loginFails.set(ip, entry);
-      return res.status(401).json({ error: 'Falsches Passwort.' });
-    }
-    loginFails.delete(ip);
-    res.json({ token: util.createAdminToken(adminSecret) });
+    const raw = String((req.body || {}).key || '').trim().toUpperCase();
+    if (!raw) return res.status(400).json({ error: 'Bitte einen Schlüssel eingeben.' });
+    const k = db.prepare('SELECT * FROM user_keys WHERE key = ?').get(raw);
+    if (!k) return res.status(401).json({ error: 'Unbekannter Schlüssel.' });
+    if (k.revoked) return res.status(401).json({ error: 'Dieser Schlüssel wurde gesperrt.' });
+    res.json({
+      token: util.createOrganizerToken(adminSecret, k.id),
+      organizer: { label: k.label },
+    });
   });
 
-  router.use(requireAdmin);
+  function requireOrganizer(req, res, next) {
+    const k = authenticate(tokenFromReq(req));
+    if (!k) return res.status(401).json({ error: 'Nicht angemeldet oder Schlüssel gesperrt.' });
+    req.organizerKey = k;
+    next();
+  }
+
+  router.use(requireOrganizer);
+
+  /** Eigenes Event laden (404/403 bei fremdem Event). */
+  function ownEvent(req) {
+    const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+    if (!e || e.created_by !== req.organizerKey.id) return null;
+    return e;
+  }
 
   // ------------------------------------------------------------- Events
 
   router.get('/events', (req, res) => {
-    res.json({ events: helpers.listEventsFor(db, null).map(helpers.eventToJson) });
+    res.json({ events: helpers.listEventsFor(db, req.organizerKey.id).map(helpers.eventToJson) });
   });
 
   router.post('/events', express.json(), (req, res) => {
     try {
-      const e = helpers.createEvent(db, req.body, null);
+      const e = helpers.createEvent(db, req.body, req.organizerKey.id);
       res.status(201).json({ event: helpers.eventToJson(e) });
     } catch (err) {
       res.status(err.status || 500).json({ error: err.message });
@@ -74,7 +81,7 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
   });
 
   router.patch('/events/:id', express.json(), (req, res) => {
-    const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+    const e = ownEvent(req);
     if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
     try {
       const updated = helpers.updateEventFields(db, e, req.body);
@@ -86,7 +93,7 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
 
   router.delete('/events/:id', async (req, res, next) => {
     try {
-      const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+      const e = ownEvent(req);
       if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
       await helpers.deleteEventCascade(db, dataDir, e);
       res.json({ ok: true });
@@ -95,72 +102,19 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     }
   });
 
-  // ------------------------------------------------------------- Veranstalter-Keys
-
-  router.get('/keys', (req, res) => {
-    const rows = db.prepare(
-      `SELECT k.*,
-              (SELECT COUNT(*) FROM events e WHERE e.created_by = k.id) AS event_count
-       FROM user_keys k ORDER BY k.created_at DESC`
-    ).all();
-    res.json({
-      keys: rows.map(r => ({
-        id: r.id,
-        key: r.key,
-        label: r.label,
-        revoked: !!r.revoked,
-        createdAt: r.created_at,
-        eventCount: r.event_count,
-      })),
-    });
-  });
-
-  router.post('/keys', express.json(), (req, res) => {
-    const label = String((req.body || {}).label || '').trim().slice(0, 60);
-    const id = util.generateId();
-    const key = util.generateAccessKey();
-    const createdAt = util.nowIso();
-    db.prepare('INSERT INTO user_keys (id, key, label, revoked, created_at) VALUES (?, ?, ?, 0, ?)')
-      .run(id, key, label, createdAt);
-    res.status(201).json({ key: { id, key, label, revoked: false, createdAt, eventCount: 0 } });
-  });
-
-  router.patch('/keys/:id', express.json(), (req, res) => {
-    const k = db.prepare('SELECT * FROM user_keys WHERE id = ?').get(req.params.id);
-    if (!k) return res.status(404).json({ error: 'Schlüssel nicht gefunden.' });
-    const revoked = (req.body || {}).revoked ? 1 : 0;
-    db.prepare('UPDATE user_keys SET revoked = ? WHERE id = ?').run(revoked, k.id);
-    res.json({ ok: true, revoked: !!revoked });
-  });
-
-  router.delete('/keys/:id', (req, res) => {
-    const k = db.prepare('SELECT * FROM user_keys WHERE id = ?').get(req.params.id);
-    if (!k) return res.status(404).json({ error: 'Schlüssel nicht gefunden.' });
-    const events = db.prepare('SELECT COUNT(*) AS c FROM events WHERE created_by = ?').get(k.id).c;
-    if (events > 0) {
-      return res.status(409).json({
-        error: `Der Schlüssel ist noch ${events} Event(s) zugeordnet. Events löschen oder Schlüssel nur sperren.`,
-      });
-    }
-    db.prepare('DELETE FROM user_keys WHERE id = ?').run(k.id);
-    res.json({ ok: true });
-  });
-
   // ------------------------------------------------------------- Sonstiges
 
-  // Teilnehmerliste eines Events.
   router.get('/events/:id/users', (req, res) => {
-    const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+    const e = ownEvent(req);
     if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
     const rows = db.prepare(
-      `SELECT u.uuid, u.first_name, u.last_name, u.created_at, COUNT(p.id) AS photo_count
+      `SELECT u.first_name, u.last_name, u.created_at, COUNT(p.id) AS photo_count
        FROM users u LEFT JOIN photos p ON p.user_id = u.id
        WHERE u.event_id = ?
        GROUP BY u.id ORDER BY u.created_at ASC`
     ).all(e.id);
     res.json({
       users: rows.map(r => ({
-        uuid: r.uuid,
         firstName: r.first_name,
         lastName: r.last_name,
         photoCount: r.photo_count,
@@ -169,10 +123,9 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     });
   });
 
-  // QR-Code mit der Event-URL (z. B. https://host:port/e/SESSIONID).
   router.get('/events/:id/qr.png', async (req, res, next) => {
     try {
-      const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+      const e = ownEvent(req);
       if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
       const origin = `${req.protocol}://${req.get('host')}`;
       const url = `${origin}/e/${e.session_id}`;
@@ -185,10 +138,9 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     }
   });
 
-  // Komplett-Export eines Events: alle Varianten aller Fotos + manifest.csv + users.csv.
   router.get('/events/:id/export.zip', async (req, res, next) => {
     try {
-      const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+      const e = ownEvent(req);
       if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
 
       const rows = db.prepare(
@@ -241,4 +193,4 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
   return router;
 }
 
-module.exports = { createAdminRouter };
+module.exports = { createOrganizerRouter };

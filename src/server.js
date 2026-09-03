@@ -27,6 +27,7 @@ const { openDb } = require('./db');
 const util = require('./util');
 const { createPublicRouter } = require('./routes/public');
 const { createAdminRouter } = require('./routes/admin');
+const { createOrganizerRouter } = require('./routes/organizer');
 
 // ------------------------------------------------------------ Konfiguration
 
@@ -52,6 +53,7 @@ app.set('trust proxy', true);
 app.disable('x-powered-by');
 
 app.use('/api/admin', createAdminRouter({ db, dataDir: DATA_DIR, adminSecret, adminPassword: ADMIN_PASSWORD }));
+app.use('/api/organizer', createOrganizerRouter({ db, dataDir: DATA_DIR, adminSecret }));
 app.use('/api/e', createPublicRouter({ db, dataDir: DATA_DIR }));
 
 // Statische Frontend-Dateien
@@ -65,6 +67,11 @@ app.get('/e/:sessionId', (req, res) => {
 // /admin → Admin-Panel
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
+});
+
+// /organizer → Veranstalter-Panel (Login mit Admin-generiertem Schlüssel)
+app.get('/organizer', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'organizer.html'));
 });
 
 // JSON-Fehlerhandler

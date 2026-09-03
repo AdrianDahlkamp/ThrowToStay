@@ -872,36 +872,56 @@ body.event-page {
 .wizard-step-title { margin: 16px 0 4px; font-size: 15.5px; font-weight: 700; }
 .wizard-step-text { margin: 0 0 14px; color: var(--text-dim); font-size: 13.5px; line-height: 1.45; }
 .wizard-step .field { margin-bottom: 12px; }
-.wizard-step .range-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-.wizard-step input[type="range"] { flex: 1; }
-.wizard-step .range-val { min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
 .wizard-quick {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
-.wizard-preview {
-  border: 1px solid var(--line);
+/* Qualitätspresets im Wizard (Low / Mid / High) */
+.quality-options { display: flex; flex-direction: column; gap: 10px; }
+.quality-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
   border-radius: 12px;
-  padding: 10px;
+  border: 1px solid var(--line);
   background: var(--bg-soft);
-  text-align: center;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
 }
-.wizard-preview img {
-  max-width: 100%;
-  max-height: 220px;
-  border-radius: 8px;
+.quality-option:active { transform: scale(0.99); }
+.quality-option .qo-radio {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--text-dim);
+  position: relative;
+}
+.quality-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.quality-option.selected .qo-radio { border-color: var(--accent); }
+.quality-option.selected .qo-radio::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.quality-option .qo-label { font-size: 14.5px; }
+.quality-option .qo-desc {
   display: block;
-  margin: 0 auto 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: 2px;
 }
-.wizard-preview .meta { font-size: 12px; color: var(--text-dim); }
 .wizard-progress {
   display: flex;
   gap: 6px;

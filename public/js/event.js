@@ -317,11 +317,18 @@ state.track = null;
     try {
       const zoomArg = state.zoomMode === 'digital' ? state.zoom : 1;
       const { maxSide, quality } = imageSettings();
+      // Frame NUR EINMAL vom Video aufnehmen. Original und gefilterte Variante
+      // werden aus demselben Frame abgeleitet (Kopie + Filter), damit beide
+      // exakt übereinander liegen – kein Versatz wie bei zwei Aufnahmen.
       const originalCanvas = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', maxSide, zoomArg);
       const originalBlob = await window.TTSFilters.canvasToBlob(originalCanvas, quality);
       let filteredBlob = null;
       if (takenWithFilter) {
-        const fc = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, filterId, maxSide, zoomArg);
+        const fc = document.createElement('canvas');
+        fc.width = originalCanvas.width;
+        fc.height = originalCanvas.height;
+        fc.getContext('2d').drawImage(originalCanvas, 0, 0);
+        window.TTSFilters.applyToCanvas(fc, filterId);
         filteredBlob = await window.TTSFilters.canvasToBlob(fc, quality);
       }
       queueUpload({ originalBlob, filteredBlob, filterId, takenWithFilter });
@@ -508,9 +515,21 @@ state.track = null;
     btnFilt.className = 'rbtn variant-btn' + (state.selectMode ? (sel && sel.filtered ? ' active' : '') : (variant === 'filtered' ? ' active' : ''));
     btnFilt.title = state.selectMode ? '„Mit Filter“ für den Download auswählen' : 'Mit Filter anzeigen';
     btnFilt.innerHTML = ICONS.sparkle;
-    btnFilt.disabled = !p.hasFiltered;
+    // Eigene Fotos: Filter-Variante auf Wunsch erzeugen (wenn noch nicht vorhanden).
+    btnFilt.disabled = !p.hasFiltered && !p.mine;
+    if (state.selectMode) {
+      btnFilt.title = p.hasFiltered ? '„Mit Filter“ für den Download auswählen' : (p.mine ? 'Filter-Variante zuerst in der Großansicht erzeugen' : 'Keine Filter-Variante vorhanden');
+    } else {
+      btnFilt.title = p.hasFiltered ? 'Mit Filter anzeigen' : (p.mine ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden');
+    }
     btnFilt.addEventListener('click', () => {
-      if (state.selectMode) toggleSelectVariant(p, 'filtered'); else setCardVariant(p, 'filtered');
+      if (state.selectMode) {
+        toggleSelectVariant(p, 'filtered');
+      } else if (!p.hasFiltered) {
+        refilterPhoto(p, 'disposable');
+      } else {
+        setCardVariant(p, 'filtered');
+      }
     });
 
     const hint = document.createElement('span');
@@ -704,23 +723,27 @@ state.track = null;
 
     // Runde Varianten-Buttons
     els.lbVariantBtns.innerHTML = '';
-    const mk = (v, icon, title, disabled) => {
+    const mk = (v, icon, title, disabled, action) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'rbtn variant-btn' + (variant === v ? ' active' : '');
       b.title = title;
       b.innerHTML = icon;
       b.disabled = disabled;
-      b.addEventListener('click', () => {
+      b.addEventListener('click', action || (() => {
         state.variantOf.set(p.id, v);
         renderLightbox();
         renderGrid();
-      });
+      }));
       return b;
     };
+    // Eigene Fotos: Filter-Variante auf Wunsch erzeugen (wenn noch nicht vorhanden).
     els.lbVariantBtns.append(
       mk('original', ICONS.plain, 'Ohne Filter anzeigen', false),
-      mk('filtered', ICONS.sparkle, 'Mit Filter anzeigen', !p.hasFiltered)
+      mk('filtered', ICONS.sparkle,
+        p.hasFiltered ? 'Mit Filter anzeigen' : (p.mine ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden'),
+        !p.hasFiltered && !p.mine,
+        !p.hasFiltered && p.mine ? () => refilterPhoto(p, 'disposable') : null)
     );
     const dlB = document.createElement('button');
     dlB.type = 'button';
@@ -754,7 +777,8 @@ state.track = null;
       if (!res0.ok) throw new Error('Original konnte nicht geladen werden.');
       const blob = await res0.blob();
       const bitmap = await createImageBitmap(blob);
-      const canvas = window.TTSFilters.captureToCanvas(bitmap, bitmap.width, bitmap.height, filterId);
+      // Ohne Downscale: die Variante hat dieselbe Auflösung wie das Original.
+      const canvas = window.TTSFilters.captureToCanvas(bitmap, bitmap.width, bitmap.height, filterId, Math.max(bitmap.width, bitmap.height));
       bitmap.close();
       const filteredBlob = await window.TTSFilters.canvasToBlob(canvas, imageSettings().quality);
 
@@ -767,7 +791,8 @@ state.track = null;
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Filter konnte nicht gespeichert werden.');
       const data = await res.json();
       Object.assign(p, data.photo);
-      state.variantOf.set(p.id, defaultVariant(p));
+      // Direkt die neu erzeugte (bzw. entfernte) Variante anzeigen.
+      state.variantOf.set(p.id, filterId === 'none' ? 'original' : 'filtered');
       // Auswahl-Status pflegen: gefilterte Variante evtl. nicht mehr verfügbar.
       const sel = state.selected.get(p.id);
       if (sel && !p.hasFiltered) {

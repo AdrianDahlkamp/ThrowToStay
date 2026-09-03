@@ -33,7 +33,11 @@ gemeinsame Galerie aller Gäste.
   Halation um Lichter, angehobene Schwarzwerte, warmer Stich, Filmkorn, Vignette) –
   auswählbar bei der Aufnahme (mit Live-Vorschau) und auch nachträglich. Der Filter wird
   **nicht** ins Original eingebrannt: Original und gefilterte Version werden als getrennte
-  Dateien gespeichert.
+  Dateien gespeichert. Der Filter wird bei Bedarf auf das Original angewendet – bei der
+  Aufnahme wird das Kamerabild nur **einmal** eingefangen und aus demselben Frame die
+  Original- und die Filter-Variante erzeugt (beide liegen exakt übereinander, kein
+  Versatz). Bei eigenen Fotos lässt sich die Filter-Variante auch nachträglich über den
+  Funkeln-Button erzeugen, wenn sie noch nicht existiert.
 - **Zoom & Blitz**: Zoom-Slider (nativ über die Kamera, sonst digitaler Crop) und Blitz –
   als LED-Torch, wo das Gerät sie unterstützt, sonst als heller Screen-Flash-Fallback.
 - **Kamera-Ansicht ohne Scrollen**: Feste Vollbild-Ansicht, alles ohne Scrollen sichtbar.
@@ -111,13 +115,11 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 ### Veranstalter (`/organizer`)
 
 Mit Zugangs-Schlüssel anmelden → eigene Events anlegen und verwalten (QR-Code, Limits,
-Bildqualität, Freigabe, Teilnehmerliste, Export). **„+ Event erstellen“** (neben
-„Abmelden“) öffnet einen **4-Schritte-Wizard**: ① Name, ② Foto-Limit pro Gast,
-③ Bildqualität (Slider für max. Größe + JPEG-Qualität mit **Live-Preview**: eine
-vergrößerte Detailansicht des Beispielmotivs in der gewählten Einstellung, damit
-Kompressionsverluste sichtbar werden, inkl. Dateigröße und Vergleich zum Standard,
-Buttons „Standard“/„Empfohlen (max.)“) und
-④ Galerie-Freigabe (Button „Standard: Folgetag 08:00“). Datum = heute, danach ist der
+Bildgröße + JPEG-Qualität, Freigabe, Teilnehmerliste, Export). **„+ Event erstellen“**
+(neben „Abmelden“) öffnet einen **4-Schritte-Wizard**: ① Name, ② Foto-Limit pro Gast,
+③ Bildqualität als **drei Presets** (Low = 1600 px / 85 %, Mid = 2560 px / 92 %,
+High = 4096 px / 100 %) und ④ Galerie-Freigabe (Button „Standard: Folgetag 08:00“).
+Datum = heute, danach ist der
 QR-Code sofort verfügbar. Einstellungen je Event liegen in zwei Tabs
 („Einstellungen“ / „Expert-Einstellungen“), identisch zum Admin-Panel.
 Keine Schlüssel-Verwaltung, keine fremden Events sichtbar.

@@ -486,7 +486,7 @@
     step: 0,
     name: '',
     maxPhotos: 30,
-    maxSide: 1600,
+    maxSide: 2560, // Default: Preset „Mid“
     jpegQuality: 92,
     unlockAt: '', // ISO
     creating: false,
@@ -504,7 +504,7 @@
     wiz.step = 0;
     wiz.name = '';
     wiz.maxPhotos = 30;
-    wiz.maxSide = 1600;
+    wiz.maxSide = 2560; // Default: Preset „Mid“
     wiz.jpegQuality = 92;
     wiz.unlockAt = new Date(defaultUnlockLocal()).toISOString();
     els.wizard.style.display = 'flex';
@@ -584,233 +584,51 @@
     body.append(h, p, quick, field);
   }
 
-  // Deterministischer Zufallsgenerator (gleiches Motiv bei jedem Render).
-  function seededRandom(seed) {
-    let s = seed >>> 0;
-    return () => {
-      s = (s + 0x6d2b79f5) | 0;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+  // Qualitätspresets für den Wizard (Low / Mid / High, ohne Slider & Preview).
+  const QUALITY_PRESETS = [
+    { id: 'low', label: 'Low', maxSide: 1600, jpegQuality: 85, desc: 'Kleinere Dateien, reicht für die Galerie' },
+    { id: 'mid', label: 'Mid', maxSide: 2560, jpegQuality: 92, desc: 'Gute Qualität – empfohlen' },
+    { id: 'high', label: 'High', maxSide: 4096, jpegQuality: 100, desc: 'Maximale Qualität, größte Dateien' },
+  ];
+
+  function qualityPresetId() {
+    const q = QUALITY_PRESETS.find(x => x.maxSide === wiz.maxSide && x.jpegQuality === wiz.jpegQuality);
+    return q ? q.id : 'mid';
   }
 
-  // Beispielmotiv für die Qualitäts-Vorschau (prozedural, kein Asset nötig).
-  // Bewusst detailreich (Grashalme, Laub, Wolken), damit JPEG-Verlusteffekte
-  // bei niedriger Qualität in der vergrößerten Detailansicht sichtbar werden.
-  function drawSample(ctx, w, h) {
-    const rnd = seededRandom(20260902);
-    // Himmel
-    const sky = ctx.createLinearGradient(0, 0, 0, h * 0.75);
-    sky.addColorStop(0, '#6db7dd');
-    sky.addColorStop(1, '#dceef6');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, w, h * 0.75);
-    // Sonne
-    ctx.fillStyle = '#fff6d8';
-    ctx.beginPath();
-    ctx.arc(w * 0.82, h * 0.16, Math.min(w, h) * 0.07, 0, Math.PI * 2);
-    ctx.fill();
-    // Wolken
-    for (let i = 0; i < 6; i++) {
-      const cx = rnd() * w;
-      const cy = h * (0.05 + rnd() * 0.25);
-      const s = Math.min(w, h) * (0.04 + rnd() * 0.06);
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      for (let j = 0; j < 5; j++) {
-        ctx.beginPath();
-        ctx.arc(cx + (j - 2) * s * 0.7, cy + Math.sin(j) * s * 0.3, s * (0.6 + rnd() * 0.5), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    // Hügel in der Distanz
-    ctx.fillStyle = '#9db98a';
-    ctx.beginPath();
-    ctx.moveTo(0, h * 0.72);
-    ctx.quadraticCurveTo(w * 0.3, h * 0.55, w * 0.55, h * 0.7);
-    ctx.quadraticCurveTo(w * 0.8, h * 0.6, w, h * 0.72);
-    ctx.lineTo(w, h * 0.78);
-    ctx.lineTo(0, h * 0.78);
-    ctx.closePath();
-    ctx.fill();
-    // Wiese
-    const grass = ctx.createLinearGradient(0, h * 0.72, 0, h);
-    grass.addColorStop(0, '#7fa653');
-    grass.addColorStop(1, '#4f7a33');
-    ctx.fillStyle = grass;
-    ctx.fillRect(0, h * 0.74, w, h * 0.26);
-    // Viele kleine Grashalme (hohe Frequenz → zeigt Artefakte)
-    const blades = Math.floor(w / 2.5);
-    for (let i = 0; i < blades; i++) {
-      const x = rnd() * w;
-      const y = h * (0.76 + rnd() * 0.24);
-      const len = h * (0.008 + rnd() * 0.02);
-      ctx.strokeStyle = `rgba(${40 + Math.floor(rnd() * 30)},${95 + Math.floor(rnd() * 85)},${30 + Math.floor(rnd() * 25)},0.8)`;
-      ctx.lineWidth = Math.max(1, w / 900);
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.quadraticCurveTo(x + (rnd() - 0.5) * 4, y - len * 0.6, x + (rnd() - 0.5) * 8, y - len);
-      ctx.stroke();
-    }
-    // Blumen
-    const flowerColors = ['#f4f4f4', '#f9e5a6', '#e8a0bf', '#c9b6e4'];
-    for (let i = 0; i < Math.floor(w / 16); i++) {
-      const x = rnd() * w;
-      const y = h * (0.8 + rnd() * 0.18);
-      ctx.fillStyle = flowerColors[Math.floor(rnd() * flowerColors.length)];
-      ctx.beginPath();
-      ctx.arc(x, y, Math.max(1.5, w / 400), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Baum mit Laub
-    const bx = w * 0.18;
-    const by = h * 0.78;
-    ctx.fillStyle = '#6b4a2b';
-    ctx.fillRect(bx - w * 0.012, by - h * 0.24, w * 0.024, h * 0.24);
-    for (let i = 0; i < 26; i++) {
-      const a = rnd() * Math.PI * 2;
-      const r = rnd() * w * 0.055;
-      ctx.fillStyle = `rgba(${50 + Math.floor(rnd() * 40)},${110 + Math.floor(rnd() * 50)},${40 + Math.floor(rnd() * 30)},0.9)`;
-      ctx.beginPath();
-      ctx.arc(bx + Math.cos(a) * r, by - h * 0.28 + Math.sin(a) * r * 0.7, w * 0.018 + rnd() * w * 0.012, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  let previewToken = 0;
-  let stdSizeKb = null; // Referenz: Dateigröße der Standard-Einstellung (1600 px / 92 %)
   function renderWizImage(body) {
     const h = document.createElement('div');
     h.className = 'wizard-step-title';
     h.textContent = 'Wie hoch soll die Fotoqualität sein?';
     const p = document.createElement('p');
     p.className = 'wizard-step-text';
-    p.textContent = 'Größere Bilder und höhere JPEG-Qualität geben mehr Detail, erzeugen aber deutlich größere Dateien. Die Vorschau zeigt eine vergrößerte Detailansicht des Beispielmotivs in der gewählten Einstellung – so siehst du, wie stark die Kompression feine Details verschmiert.';
-    const quick = document.createElement('div');
-    quick.className = 'wizard-quick';
-    const qStd = document.createElement('button');
-    qStd.className = 'btn small secondary';
-    qStd.type = 'button';
-    qStd.textContent = 'Standard: 1600 px / 92 %';
-    qStd.addEventListener('click', () => { wiz.maxSide = 1600; wiz.jpegQuality = 92; renderWizard(); });
-    const qMax = document.createElement('button');
-    qMax.className = 'btn small secondary';
-    qMax.type = 'button';
-    qMax.textContent = 'Empfohlen (max.): 4096 px / 100 %';
-    qMax.addEventListener('click', () => { wiz.maxSide = 4096; wiz.jpegQuality = 100; renderWizard(); });
-    quick.append(qStd, qMax);
-    body.append(h, p, quick);
+    p.textContent = 'Größere Bilder und höhere JPEG-Qualität geben mehr Detail, erzeugen aber deutlich größere Dateien. Feinjustieren kannst du später in den Expert-Einstellungen des Events.';
+    body.append(h, p);
 
-    const fSide = document.createElement('div');
-    fSide.className = 'field';
-    fSide.innerHTML = '<label>Max. Bildgröße (längste Seite, px)</label>';
-    const rangeSide = document.createElement('div');
-    rangeSide.className = 'range-line';
-    const rs = document.createElement('input');
-    rs.type = 'range';
-    rs.min = '640';
-    rs.max = '4096';
-    rs.step = '64';
-    rs.value = wiz.maxSide;
-    rs.setAttribute('aria-label', 'Max. Bildgröße');
-    const vs = document.createElement('span');
-    vs.className = 'range-val';
-    vs.textContent = wiz.maxSide + ' px';
-    rs.addEventListener('input', () => {
-      wiz.maxSide = parseInt(rs.value, 10);
-      vs.textContent = wiz.maxSide + ' px';
-      updatePreview();
-    });
-    rangeSide.append(rs, vs);
-    fSide.appendChild(rangeSide);
-
-    const fQual = document.createElement('div');
-    fQual.className = 'field';
-    fQual.innerHTML = '<label>JPEG-Qualität</label>';
-    const rangeQual = document.createElement('div');
-    rangeQual.className = 'range-line';
-    const rq = document.createElement('input');
-    rq.type = 'range';
-    rq.min = '50';
-    rq.max = '100';
-    rq.step = '1';
-    rq.value = wiz.jpegQuality;
-    rq.setAttribute('aria-label', 'JPEG-Qualität');
-    const vq = document.createElement('span');
-    vq.className = 'range-val';
-    vq.textContent = wiz.jpegQuality + ' %';
-    rq.addEventListener('input', () => {
-      wiz.jpegQuality = parseInt(rq.value, 10);
-      vq.textContent = wiz.jpegQuality + ' %';
-      updatePreview();
-    });
-    rangeQual.append(rq, vq);
-    fQual.appendChild(rangeQual);
-
-    const prev = document.createElement('div');
-    prev.className = 'wizard-preview';
-    prev.innerHTML = '<img id="wizPreviewImg" alt="Detail-Vorschau"><div class="meta" id="wizPreviewMeta">…</div>';
-    body.append(fSide, fQual, prev);
-    updatePreview();
-
-    // Referenz-Größe der Standard-Einstellung (1600 px / 92 %), einmal berechnet.
-    if (stdSizeKb === null) {
-      const s = document.createElement('canvas');
-      s.width = 1600;
-      s.height = 1200;
-      drawSample(s.getContext('2d'), 1600, 1200);
-      s.toBlob(b => { stdSizeKb = b ? Math.round(b.size / 1024) : null; }, 'image/jpeg', 0.92);
+    const wrap = document.createElement('div');
+    wrap.className = 'quality-options';
+    const selId = qualityPresetId();
+    for (const q of QUALITY_PRESETS) {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.className = 'quality-option' + (q.id === selId ? ' selected' : '');
+      const radio = document.createElement('span');
+      radio.className = 'qo-radio';
+      const label = document.createElement('span');
+      label.className = 'qo-label';
+      label.innerHTML = `<b>${q.label}</b> · ${q.maxSide} px · ${q.jpegQuality} %`;
+      const desc = document.createElement('span');
+      desc.className = 'qo-desc';
+      desc.textContent = q.desc;
+      opt.append(radio, label, desc);
+      opt.addEventListener('click', () => {
+        wiz.maxSide = q.maxSide;
+        wiz.jpegQuality = q.jpegQuality;
+        for (const b of wrap.querySelectorAll('.quality-option')) b.classList.toggle('selected', b === opt);
+      });
+      wrap.appendChild(opt);
     }
-
-    // Ausschnitt (in Pixeln des Zielbildes) und Vergrößerung der Detailansicht.
-    const DETAIL_CROP = 360;
-    const DETAIL_SCALE = 2;
-
-    function updatePreview() {
-      const token = ++previewToken;
-      const src = document.createElement('canvas');
-      src.width = 1280;
-      src.height = 960;
-      drawSample(src.getContext('2d'), 1280, 960);
-      const scale = Math.min(1, wiz.maxSide / 1280);
-      const w = Math.max(1, Math.round(1280 * scale));
-      const hh = Math.max(1, Math.round(960 * scale));
-      const dst = document.createElement('canvas');
-      dst.width = w;
-      dst.height = hh;
-      const dctx = dst.getContext('2d');
-      dctx.imageSmoothingQuality = 'high';
-      dctx.drawImage(src, 0, 0, w, hh);
-      // Vollbild in der gewählten Qualität encodieren → echte Dateigröße.
-      dst.toBlob(fullBlob => {
-        if (token !== previewToken || !fullBlob) return;
-        // Detail-Ausschnitt aus der Bildmitte, vergrößelt dargestellt.
-        const crop = Math.min(DETAIL_CROP, w, hh);
-        const detail = document.createElement('canvas');
-        detail.width = crop * DETAIL_SCALE;
-        detail.height = crop * DETAIL_SCALE;
-        const dctx2 = detail.getContext('2d');
-        dctx2.imageSmoothingQuality = 'high';
-        dctx2.drawImage(dst, (w - crop) / 2, (hh - crop) / 2, crop, crop, 0, 0, detail.width, detail.height);
-        detail.toBlob(detBlob => {
-          if (token !== previewToken || !detBlob) return;
-          const img = document.getElementById('wizPreviewImg');
-          const meta = document.getElementById('wizPreviewMeta');
-          if (!img || !meta) return;
-          if (img.dataset.src) URL.revokeObjectURL(img.dataset.src);
-          const url = URL.createObjectURL(detBlob);
-          img.dataset.src = url;
-          img.src = url;
-          const kb = Math.max(1, Math.round(fullBlob.size / 1024));
-          let compare = '';
-          if (stdSizeKb !== null && (wiz.maxSide !== 1600 || wiz.jpegQuality !== 92)) {
-            const diff = kb - stdSizeKb;
-            compare = diff >= 0 ? ` · ${diff} KB mehr als Standard` : ` · ${-diff} KB weniger als Standard`;
-          }
-          meta.textContent = `Detailansicht (${DETAIL_SCALE}× vergrößert) · gespeichert als ${w} × ${hh} px · JPEG ${wiz.jpegQuality} % · ≈ ${kb} KB${compare}`;
-        }, 'image/jpeg', wiz.jpegQuality / 100);
-      }, 'image/jpeg', wiz.jpegQuality / 100);
-    }
+    body.append(wrap);
   }
 
   function renderWizUnlock(body) {
@@ -852,7 +670,7 @@
       if (!Number.isFinite(v) || v < 1) { toast('Bitte ein gültiges Foto-Limit angeben.', true); return false; }
       wiz.maxPhotos = Math.min(v, 1000);
     } else if (wiz.step === 2) {
-      // Werte kommen live aus den Slidern (wiz.maxSide / wiz.jpegQuality)
+      // Werte kommen aus dem gewählten Qualitätspreset (wiz.maxSide / wiz.jpegQuality)
     } else if (wiz.step === 3) {
       const v = els.wizardBody.querySelector('#wizUnlock').value;
       const t = v ? Date.parse(v) : NaN;

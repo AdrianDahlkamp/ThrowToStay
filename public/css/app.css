@@ -151,15 +151,16 @@ input::placeholder { color: rgba(154, 166, 181, 0.6); }
 /* Kamera-Modus: feste Viewport-Höhe, kein Scrollen/Bouncen – die Galerie
    scrollt in ihrem eigenen Container. */
 body.event-page {
-  position: fixed;
-  inset: 0;
-  width: 100%;
+  /* Kein position:fixed/inset:0 – das würde auf iOS den (größeren) Layout-Viewport
+     füllen und den Header hinter die Adressleiste schieben. Stattdessen normale
+     Höhe über dvh (mit vh-Fallback für ältere Browser). */
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
 }
 
-.event-app { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.event-app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 
 .app-header {
   display: flex;

@@ -322,18 +322,16 @@ state.track = null;
       // exakt übereinander liegen – kein Versatz wie bei zwei Aufnahmen.
       const originalCanvas = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', maxSide, zoomArg);
       const originalBlob = await window.TTSFilters.canvasToBlob(originalCanvas, quality);
-      // Die Filter-Variante (Einweg-Kamera-Look) wird IMMER mitgespeichert,
-      // damit beide Varianten zum Download verfügbar sind – unabhängig davon,
-      // ob der Filter bei der Aufnahme aktiv war (der bestimmt nur die
-      // Standard-Ansicht). Aus demselben Frame wie das Original (kein Versatz).
+      // Das Original geht SOFORT in den Upload – dadurch wird der Auslöser schnell
+      // wieder frei (keine spürbare Verzögerung). Die Filter-Variante
+      // (Einweg-Kamera-Look) wird IMMER erzeugt und nach dem Original-Upload im
+      // Hintergrund nachgereicht (attachFilteredVariant), damit beide Varianten
+      // zum Download verfügbar sind, ohne die Aufnahme zu blockieren. Sie kommt
+      // aus demselben Frame wie das Original (kein Versatz) – unabhängig davon,
+      // ob der Filter bei der Aufnahme aktiv war.
       const variantFilterId = filterId !== 'none' ? filterId : 'disposable';
-      const fc = document.createElement('canvas');
-      fc.width = originalCanvas.width;
-      fc.height = originalCanvas.height;
-      fc.getContext('2d').drawImage(originalCanvas, 0, 0);
-      window.TTSFilters.applyToCanvas(fc, variantFilterId);
-      const filteredBlob = await window.TTSFilters.canvasToBlob(fc, quality);
-      queueUpload({ originalBlob, filteredBlob, filterId: variantFilterId, takenWithFilter });
+      queueUpload({ originalBlob, filteredBlob: null, filterId: variantFilterId, takenWithFilter,
+        _followUp: { canvas: originalCanvas, filterId: variantFilterId, quality } });
     } catch (err) {
       toast(err.message || 'Aufnahme fehlgeschlagen.', true);
     } finally {
@@ -372,6 +370,36 @@ state.track = null;
     const photo = data.photo;
     state.photos.push(photo);
     state.variantOf.set(photo.id, defaultVariant(photo));
+    // Filter-Variante im Hintergrund erzeugen + anhängen (blockiert den
+    // Auslöser nicht). Best-Effort: schlug sie fehl, kann sie jeder per
+    // Funkel-Button nachträglich erzeugen.
+    if (item._followUp) attachFilteredVariant(photo, item._followUp).catch(() => {});
+    return data;
+  }
+
+  // Erzeugt die Filter-Variante aus dem aufgenommene Frame und reicht sie über
+  // den Refilter-Endpoint nach – asynchron, nachdem das Original gespeichert
+  // wurde. Damit beide Varianten pro Foto existieren, ohne die Aufnahme zu
+  // verlangsamen.
+  async function attachFilteredVariant(photo, fu) {
+    const fc = document.createElement('canvas');
+    fc.width = fu.canvas.width;
+    fc.height = fu.canvas.height;
+    fc.getContext('2d').drawImage(fu.canvas, 0, 0);
+    window.TTSFilters.applyToCanvas(fc, fu.filterId);
+    const filteredBlob = await window.TTSFilters.canvasToBlob(fc, fu.quality);
+    const fd = new FormData();
+    fd.set('uuid', state.uuid);
+    fd.set('filterId', fu.filterId);
+    fd.set('filtered', filteredBlob, 'filtered.jpg');
+    const res = await fetch(`/api/e/${SID}/photos/${photo.id}/refilter`, { method: 'POST', body: fd });
+    if (res.ok) {
+      try {
+        const data = await res.json();
+        Object.assign(photo, data.photo);
+        renderGrid();
+      } catch { /* ignore */ }
+    }
   }
 
   function updateRetryBanner() {

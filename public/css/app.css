@@ -713,6 +713,25 @@ body.event-page {
 }
 .settings-grid .field { margin-bottom: 0; }
 
+/* Aufklappbare Expert-Einstellungen (details/summary) */
+details.expert {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+details.expert summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+  list-style-position: inside;
+}
+details.expert[open] summary { margin-bottom: 12px; }
+details.expert .settings-grid { margin-bottom: 0; }
+
 .users-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .users-table th, .users-table td {
   text-align: left;

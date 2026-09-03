@@ -274,8 +274,19 @@
     unlockInput.value = toLocalInputValue(e.galleryUnlockAt);
     fUnlock.appendChild(unlockInput);
 
-    settingsGrid.append(fName, fDate, fLimit, fSide, fQuality, fUnlock);
+    settingsGrid.append(fName, fDate);
     settings.appendChild(settingsGrid);
+
+    const expert = document.createElement('details');
+    expert.className = 'expert';
+    const expertSummary = document.createElement('summary');
+    expertSummary.textContent = 'Expert-Einstellungen (Foto-Limit, Bildqualität, Galerie-Freigabe)';
+    expert.appendChild(expertSummary);
+    const expertGrid = document.createElement('div');
+    expertGrid.className = 'settings-grid';
+    expertGrid.append(fLimit, fSide, fQuality, fUnlock);
+    expert.appendChild(expertGrid);
+    settings.appendChild(expert);
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn small';

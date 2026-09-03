@@ -84,23 +84,27 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 ### Admin (`/admin`)
 
 1. Mit `ADMIN_PASSWORD` anmelden.
-2. Event anlegen: Name, Event-Datum, max. Fotos pro Gast (Standard 30).
+2. Event anlegen: **nur den Namen eingeben** – das Datum wird automatisch auf heute
+   gesetzt, das Foto-Limit auf 30 (Standard). Datum und Foto-Limit sind optional in
+   den aufklappbaren **Expert-Einstellungen** änderbar.
 3. **Zugangs-Schlüssel für Veranstalter generieren** (mit Bezeichnung, z. B. Vereinsname)
    – Veranstalter melden sich damit unter `/organizer` an und verwalten ihre eigenen
    Events. Schlüssel sind sperbar (Login/Token sofort ungültig) und löschbar (nur
    solange keine Events zugeordnet sind).
 4. QR-Code + Event-URL pro Event anzeigen, kopieren oder als PNG herunterladen.
-5. Einstellungen je Event: Name, Datum, Foto-Limit, **max. Bildgröße (px, längste
-   Seite)** und **JPEG-Qualität (%)**, Freigabe-Zeitpunkt der Galerie (Standard:
-   Folgetag 08:00 Uhr; Buttons „Jetzt freigeben“ / „Galerie sperren“).
+5. Einstellungen je Event: Name und Datum direkt sichtbar; Foto-Limit, **max.
+   Bildgröße (px, längste Seite)**, **JPEG-Qualität (%)** und Freigabe-Zeitpunkt
+   der Galerie (Standard: Folgetag 08:00 Uhr) in den aufklappbaren
+   **Expert-Einstellungen**. Buttons „Jetzt freigeben“ / „Galerie sperren“.
 6. Teilnehmerliste mit UUID + Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos
    beider Varianten inkl. `manifest.csv` und `users.csv` herunter.
 
 ### Veranstalter (`/organizer`)
 
 Mit Zugangs-Schlüssel anmelden → eigene Events anlegen und verwalten (QR-Code, Limits,
-Bildqualität, Freigabe, Teilnehmerliste, Export). Keine Schlüssel-Verwaltung, keine
-fremden Events sichtbar.
+Bildqualität, Freigabe, Teilnehmerliste, Export). Einfacher Workflow: Event-Name
+eingeben → Event entsteht mit Datum = heute und Standard-Limit 30, der QR-Code ist
+sofort verfügbar. Keine Schlüssel-Verwaltung, keine fremden Events sichtbar.
 
 ### Gäste (`/e/<SESSION-ID>`)
 

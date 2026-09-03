@@ -56,6 +56,11 @@ app.use('/api/admin', createAdminRouter({ db, dataDir: DATA_DIR, adminSecret, ad
 app.use('/api/organizer', createOrganizerRouter({ db, dataDir: DATA_DIR, adminSecret }));
 app.use('/api/e', createPublicRouter({ db, dataDir: DATA_DIR }));
 
+// Start-Seite: direkt zum Veranstalter-Login (User-Login), nicht zum Admin.
+app.get('/', (req, res) => {
+  res.redirect('/organizer');
+});
+
 // Statische Frontend-Dateien
 app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
 

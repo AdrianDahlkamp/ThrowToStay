@@ -36,21 +36,27 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     res.status(401).json({ error: 'Nicht angemeldet.' });
   }
 
+  const MAX_LOGIN_FAILS = 5;
+  const LOGIN_BLOCK_MS = 30_000;
+
   router.post('/login', express.json(), (req, res) => {
     const ip = req.ip || 'unbekannt';
     const entry = loginFails.get(ip) || { count: 0, blockedUntil: 0 };
     if (Date.now() < entry.blockedUntil) {
-      return res.status(429).json({ error: 'Zu viele Fehlversuche. Bitte kurz warten.' });
+      const secs = Math.ceil((entry.blockedUntil - Date.now()) / 1000);
+      return res.status(429).json({ error: `Zu viele Fehlversuche – bitte ${secs} Sekunden warten.` });
     }
-    const password = String((req.body || {}).password || '');
+    // Whitespace (z. B. aus Passwort-Managern/Clipboard) nicht mitzählen.
+    const password = String((req.body || {}).password || '').trim();
     if (password !== adminPassword) {
       entry.count += 1;
-      if (entry.count >= 5) {
-        entry.blockedUntil = Date.now() + 60_000;
-        entry.count = 0;
-      }
       loginFails.set(ip, entry);
-      return res.status(401).json({ error: 'Falsches Passwort.' });
+      if (entry.count >= MAX_LOGIN_FAILS) {
+        entry.blockedUntil = Date.now() + LOGIN_BLOCK_MS;
+        entry.count = 0;
+        return res.status(429).json({ error: 'Zu viele Fehlversuche – bitte 30 Sekunden warten.' });
+      }
+      return res.status(401).json({ error: `Falsches Passwort (noch ${MAX_LOGIN_FAILS - entry.count} Versuche).` });
     }
     loginFails.delete(ip);
     res.json({ token: util.createAdminToken(adminSecret) });

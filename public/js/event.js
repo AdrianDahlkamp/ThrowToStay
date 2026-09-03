@@ -322,16 +322,18 @@ state.track = null;
       // exakt übereinander liegen – kein Versatz wie bei zwei Aufnahmen.
       const originalCanvas = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', maxSide, zoomArg);
       const originalBlob = await window.TTSFilters.canvasToBlob(originalCanvas, quality);
-      let filteredBlob = null;
-      if (takenWithFilter) {
-        const fc = document.createElement('canvas');
-        fc.width = originalCanvas.width;
-        fc.height = originalCanvas.height;
-        fc.getContext('2d').drawImage(originalCanvas, 0, 0);
-        window.TTSFilters.applyToCanvas(fc, filterId);
-        filteredBlob = await window.TTSFilters.canvasToBlob(fc, quality);
-      }
-      queueUpload({ originalBlob, filteredBlob, filterId, takenWithFilter });
+      // Die Filter-Variante (Einweg-Kamera-Look) wird IMMER mitgespeichert,
+      // damit beide Varianten zum Download verfügbar sind – unabhängig davon,
+      // ob der Filter bei der Aufnahme aktiv war (der bestimmt nur die
+      // Standard-Ansicht). Aus demselben Frame wie das Original (kein Versatz).
+      const variantFilterId = filterId !== 'none' ? filterId : 'disposable';
+      const fc = document.createElement('canvas');
+      fc.width = originalCanvas.width;
+      fc.height = originalCanvas.height;
+      fc.getContext('2d').drawImage(originalCanvas, 0, 0);
+      window.TTSFilters.applyToCanvas(fc, variantFilterId);
+      const filteredBlob = await window.TTSFilters.canvasToBlob(fc, quality);
+      queueUpload({ originalBlob, filteredBlob, filterId: variantFilterId, takenWithFilter });
     } catch (err) {
       toast(err.message || 'Aufnahme fehlgeschlagen.', true);
     } finally {
@@ -355,7 +357,8 @@ state.track = null;
     fd.set('filterId', item.filterId);
     fd.set('takenWithFilter', item.takenWithFilter ? '1' : '0');
     fd.set('original', item.originalBlob, 'original.jpg');
-    if (item.takenWithFilter && item.filteredBlob) fd.set('filtered', item.filteredBlob, 'filtered.jpg');
+    // Filter-Variante wird immer mitgesendet (wird bei der Aufnahme erzeugt).
+    if (item.filteredBlob) fd.set('filtered', item.filteredBlob, 'filtered.jpg');
 
     const res = await fetch(`/api/e/${SID}/photos`, { method: 'POST', body: fd });
     if (!res.ok) {
@@ -515,12 +518,16 @@ state.track = null;
     btnFilt.className = 'rbtn variant-btn' + (state.selectMode ? (sel && sel.filtered ? ' active' : '') : (variant === 'filtered' ? ' active' : ''));
     btnFilt.title = state.selectMode ? '„Mit Filter“ für den Download auswählen' : 'Mit Filter anzeigen';
     btnFilt.innerHTML = ICONS.sparkle;
-    // Eigene Fotos: Filter-Variante auf Wunsch erzeugen (wenn noch nicht vorhanden).
-    btnFilt.disabled = !p.hasFiltered && !p.mine;
+    // Filter-Variante erzeugen: bei eigenen Fotos immer möglich, bei fremden
+    // Fotos nach Galerie-Freigabe (die Bilder sind dann für alle sichtbar).
+    const canGenerateFilt = p.mine || !!(state.event && state.event.galleryUnlocked);
     if (state.selectMode) {
-      btnFilt.title = p.hasFiltered ? '„Mit Filter“ für den Download auswählen' : (p.mine ? 'Filter-Variante zuerst in der Großansicht erzeugen' : 'Keine Filter-Variante vorhanden');
+      // Auswahlmodus: nur vorhandene Varianten anwählbar.
+      btnFilt.disabled = !p.hasFiltered;
+      btnFilt.title = p.hasFiltered ? '„Mit Filter“ für den Download auswählen' : 'Keine Filter-Variante vorhanden';
     } else {
-      btnFilt.title = p.hasFiltered ? 'Mit Filter anzeigen' : (p.mine ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden');
+      btnFilt.disabled = !p.hasFiltered && !canGenerateFilt;
+      btnFilt.title = p.hasFiltered ? 'Mit Filter anzeigen' : (canGenerateFilt ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden');
     }
     btnFilt.addEventListener('click', () => {
       if (state.selectMode) {
@@ -737,13 +744,15 @@ state.track = null;
       }));
       return b;
     };
-    // Eigene Fotos: Filter-Variante auf Wunsch erzeugen (wenn noch nicht vorhanden).
+    // Filter-Variante erzeugen: bei eigenen Fotos immer möglich, bei fremden
+    // Fotos nach Galerie-Freigabe (die Bilder sind dann für alle sichtbar).
+    const canGenerateFilt = p.mine || !!(state.event && state.event.galleryUnlocked);
     els.lbVariantBtns.append(
       mk('original', ICONS.plain, 'Ohne Filter anzeigen', false),
       mk('filtered', ICONS.sparkle,
-        p.hasFiltered ? 'Mit Filter anzeigen' : (p.mine ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden'),
-        !p.hasFiltered && !p.mine,
-        !p.hasFiltered && p.mine ? () => refilterPhoto(p, 'disposable') : null)
+        p.hasFiltered ? 'Mit Filter anzeigen' : (canGenerateFilt ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden'),
+        !p.hasFiltered && !canGenerateFilt,
+        !p.hasFiltered && canGenerateFilt ? () => refilterPhoto(p, 'disposable') : null)
     );
     const dlB = document.createElement('button');
     dlB.type = 'button';

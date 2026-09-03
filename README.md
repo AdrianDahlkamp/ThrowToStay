@@ -31,13 +31,16 @@ gemeinsame Galerie aller Gäste.
   wird **nicht** in die Bilddateien eingebrannt.
 - **Einweg-Kamera-Filter**: Ein hochwertiger „Throwaway“-Look (Blitz-Belichtung,
   Halation um Lichter, angehobene Schwarzwerte, warmer Stich, Filmkorn, Vignette) –
-  auswählbar bei der Aufnahme (mit Live-Vorschau) und auch nachträglich. Der Filter wird
-  **nicht** ins Original eingebrannt: Original und gefilterte Version werden als getrennte
-  Dateien gespeichert. Der Filter wird bei Bedarf auf das Original angewendet – bei der
-  Aufnahme wird das Kamerabild nur **einmal** eingefangen und aus demselben Frame die
-  Original- und die Filter-Variante erzeugt (beide liegen exakt übereinander, kein
-  Versatz). Bei eigenen Fotos lässt sich die Filter-Variante auch nachträglich über den
-  Funkeln-Button erzeugen, wenn sie noch nicht existiert.
+  auswählbar bei der Aufnahme (mit Live-Vorschau). Der Filter wird **nicht** ins Original
+  eingebrannt: Original und gefilterte Version werden als getrennte Dateien gespeichert.
+  Bei der Aufnahme wird das Kamerabild nur **einmal** eingefangen, und aus demselben
+  Frame werden **immer** beide Varianten erzeugt (kein Versatz). Die Filter-Variante wird
+  also für jedes Foto mitgespeichert – auch wenn der Filter bei der Aufnahme „aus“
+  stand (das bestimmt nur noch die Standard-Ansicht). So ist nach der Galerie-Freigabe
+  **jedes** Foto von **jedem** Gast in **beiden** Varianten (original + filter)
+  herunterladbar. Falls bei älteren Fotos die Filter-Variante fehlt, kann sie über den
+  Funkeln-Button nachträglich erzeugt werden – bei eigenen Fotos jederzeit, bei fremden
+  nach der Freigabe. Entfernen der Filter-Variante bleibt dem Besitzer vorbehalten.
 - **Zoom & Blitz**: Zoom-Slider (nativ über die Kamera, sonst digitaler Crop) und Blitz –
   als LED-Torch, wo das Gerät sie unterstützt, sonst als heller Screen-Flash-Fallback.
 - **Kamera-Ansicht ohne Scrollen**: Feste Vollbild-Ansicht, alles ohne Scrollen sichtbar.

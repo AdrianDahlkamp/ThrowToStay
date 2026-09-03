@@ -162,8 +162,11 @@ function createPublicRouter({ db, dataDir }) {
       const baseName = `${Date.now()}-${photoCountForUser(user.id) + 1}-${photoIdShort()}`;
 
       const original = await persistUpload(req.files.original[0].path, event, user.uuid, baseName, 'original');
+      // Die Filter-Variante wird immer gespeichert, wenn sie mitgesendet wird
+      // (der Client erzeugt sie bei jeder Aufnahme) – so sind beide Varianten
+      // zum Download verfügbar, unabhängig von der gewählten Standard-Ansicht.
       let filtered = null;
-      if (takenWithFilter && req.files.filtered && req.files.filtered[0]) {
+      if (req.files.filtered && req.files.filtered[0]) {
         filtered = await persistUpload(req.files.filtered[0].path, event, user.uuid, baseName, 'filtered');
       }
 
@@ -267,26 +270,35 @@ function createPublicRouter({ db, dataDir }) {
 
       const photo = db.prepare('SELECT * FROM photos WHERE id = ? AND event_id = ?').get(req.params.photoId, event.id);
       if (!photo) return res.status(404).json({ error: 'Foto nicht gefunden.' });
-      if (photo.user_id !== user.id) return res.status(403).json({ error: 'Nur der Besitzer kann den Filter ändern.' });
+      const owner = db.prepare('SELECT * FROM users WHERE id = ?').get(photo.user_id);
+      const isOwner = photo.user_id === user.id;
 
       const filterId = String(req.body.filterId || '').slice(0, 32);
       if (!filterId) return res.status(400).json({ error: 'filterId fehlt.' });
 
       if (filterId === 'none') {
+        // Entfernen der Filter-Variante: immer nur der Besitzer.
+        if (!isOwner) return res.status(403).json({ error: 'Nur der Besitzer kann die Filter-Variante entfernen.' });
         if (photo.filtered_file) {
-          await fsp.unlink(storedPathFor(event, user.uuid, photo.filtered_file)).catch(() => {});
+          await fsp.unlink(storedPathFor(event, owner.uuid, photo.filtered_file)).catch(() => {});
         }
         db.prepare('UPDATE photos SET filtered_file = NULL, filter_id = NULL WHERE id = ?').run(photo.id);
       } else {
+        // Erzeugen/Ersetzen der Filter-Variante: der Besitzer immer, jeder
+        // weitere Gast nach Galerie-Freigabe (die Fotos sind dann öffentlich).
+        if (!isOwner && !isGalleryUnlocked(event)) {
+          return res.status(403).json({ error: 'Die Galerie ist noch nicht freigeschaltet.' });
+        }
         if (!req.file) return res.status(400).json({ error: 'Gefiltertes Bild fehlt.' });
         const baseName = photo.original_file.replace(/-original\.[a-z0-9]+$/i, '');
-        const filtered = await persistUpload(req.file.path, event, user.uuid, baseName, 'filtered');
+        // Die Datei gehört zum Foto: immer im Ordner des Besitzers speichern.
+        const filtered = await persistUpload(req.file.path, event, owner.uuid, baseName, 'filtered');
         db.prepare('UPDATE photos SET filtered_file = ?, filter_id = ? WHERE id = ?')
           .run(filtered.filename, filterId, photo.id);
       }
 
       const updated = db.prepare('SELECT * FROM photos WHERE id = ?').get(photo.id);
-      res.json({ photo: photoToJson(updated, user, true) });
+      res.json({ photo: photoToJson(updated, owner, isOwner) });
     } catch (err) {
       next(err);
     }

@@ -256,6 +256,68 @@ async function main() {
   check('Content-Disposition gesetzt', /attachment; filename=/.test(dlRes.headers.get('content-disposition') || ''));
   check('ZIP enthält 3 Fotos + manifest.csv (4 Einträge)', countZipEntries(dlBuf) === 4, `gefunden: ${countZipEntries(dlBuf)}`);
 
+  console.log('\n— Filter-Variante immer vorhanden & für alle erzeugbar —');
+  const ev2create = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'FilterTest', eventDate: today, maxPhotosPerUser: 30 }),
+  });
+  const { event: ev2 } = await ev2create.json();
+  const userC = uuid();
+  await fetch(BASE + `/api/e/${ev2.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: userC, firstName: 'Cara', lastName: 'Filter' }),
+  });
+  // Neuer Client: Filter-Variante wird IMMER mitgesendet, auch wenn
+  // takenWithFilter=false (Standard-Ansicht = ohne Filter).
+  const fdNew = new FormData();
+  fdNew.set('uuid', userC);
+  fdNew.set('filterId', 'disposable');
+  fdNew.set('takenWithFilter', '0');
+  fdNew.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+  fdNew.set('filtered', new Blob([JPEG], { type: 'image/jpeg' }), 'filtered.jpg');
+  const newUp = await fetch(BASE + `/api/e/${ev2.sessionId}/photos`, { method: 'POST', body: fdNew });
+  const newUpData = await newUp.json();
+  check('Filter-Variante wird gespeichert, obwohl takenWithFilter=false', newUp.ok && newUpData.photo.hasFiltered === true && newUpData.photo.takenWithFilter === false);
+
+  // Zweites Foto im alten Stil (ohne Filter-Variante) → zum Erzeugen-Testen.
+  const fdOld = new FormData();
+  fdOld.set('uuid', userC);
+  fdOld.set('filterId', 'none');
+  fdOld.set('takenWithFilter', '0');
+  fdOld.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+  const oldUp = await fetch(BASE + `/api/e/${ev2.sessionId}/photos`, { method: 'POST', body: fdOld });
+  const oldUpData = await oldUp.json();
+  check('Foto ohne mitgesendete Variante: hasFiltered=false', oldUp.ok && oldUpData.photo.hasFiltered === false);
+
+  const userD = uuid();
+  await fetch(BASE + `/api/e/${ev2.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: userD, firstName: 'Dan', lastName: 'Gast' }),
+  });
+  const genForm = () => {
+    const f = new FormData();
+    f.set('uuid', userD);
+    f.set('filterId', 'disposable');
+    f.set('filtered', new Blob([JPEG], { type: 'image/jpeg' }), 'filtered.jpg');
+    return f;
+  };
+  const genLockedRes = await fetch(BASE + `/api/e/${ev2.sessionId}/photos/${oldUpData.photo.id}/refilter`, { method: 'POST', body: genForm() });
+  check('Fremder erzeugt Filter-Variante VOR Freigabe → 403', genLockedRes.status === 403);
+
+  await fetch(BASE + `/api/admin/events/${ev2.id}`, {
+    method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ galleryUnlockAt: 'now' }),
+  });
+  const genOpenRes = await fetch(BASE + `/api/e/${ev2.sessionId}/photos/${oldUpData.photo.id}/refilter`, { method: 'POST', body: genForm() });
+  const genOpenData = await genOpenRes.json();
+  check('Fremder erzeugt Filter-Variante NACH Freigabe OK (mine=false)', genOpenRes.ok && genOpenData.photo.hasFiltered === true && genOpenData.photo.mine === false);
+
+  const removeForeign = new FormData();
+  removeForeign.set('uuid', userD);
+  removeForeign.set('filterId', 'none');
+  const removeForeignRes = await fetch(BASE + `/api/e/${ev2.sessionId}/photos/${oldUpData.photo.id}/refilter`, { method: 'POST', body: removeForeign });
+  check('Fremder entfernt Filter-Variante → 403 (nur Besitzer)', removeForeignRes.status === 403);
+
   console.log('\n— Admin-Export —');
   const exportRes = await fetch(BASE + `/api/admin/events/${event.id}/export.zip`, { headers: auth });
   const exportBuf = Buffer.from(await exportRes.arrayBuffer());

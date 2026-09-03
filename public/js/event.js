@@ -289,6 +289,55 @@ state.track = null;
     };
   }
 
+  // Schärfe-Score eines Canvases: mittlere quadratische Gradienten-Magnitude auf
+  // stark verkleinertem Bild. Hoher Wert = scharf, niedriger = unscharf/verwackelt.
+  function sharpnessScore(canvas) {
+    const target = 96;
+    const scale = target / Math.max(canvas.width, canvas.height, 1);
+    const w = Math.max(1, Math.round(canvas.width * scale));
+    const h = Math.max(1, Math.round(canvas.height * scale));
+    const sc = document.createElement('canvas');
+    sc.width = w; sc.height = h;
+    const sctx = sc.getContext('2d', { willReadFrequently: true });
+    sctx.drawImage(canvas, 0, 0, w, h);
+    const img = sctx.getImageData(0, 0, w, h).data;
+    let sum = 0, count = 0;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = (y * w + x) * 4;
+        const left = img[i - 4], right = img[i + 4];
+        const up = img[i - w * 4], down = img[i + w * 4];
+        const gx = (right - left) / 2;
+        const gy = (down - up) / 2;
+        sum += gx * gx + gy * gy;
+        count++;
+      }
+    }
+    return count ? sum / count : 0;
+  }
+
+  // Nimmt mehrere Video-Frames hintereinander auf und liefert den schärfsten.
+  // Damit wird die Bewegungsunschärfe, die beim Auslösen durch die
+  // Handbewegung entsteht, eliminiert: von mehreren Frames ist praktisch
+  // immer einer, in dem die Hand (kurz) stillsteht. Nicht-gewählte Frames
+  // werden sofort freigegeben, damit der Speicher nicht aufbläht.
+  async function captureSharpestFrame(video, count, maxSide, zoom) {
+    let best = null, bestScore = -1;
+    for (let i = 0; i < count; i++) {
+      const frame = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', maxSide, zoom);
+      const s = sharpnessScore(frame);
+      if (s > bestScore) {
+        if (best) { best.width = 0; best.height = 0; }
+        best = frame;
+        bestScore = s;
+      } else {
+        frame.width = 0; frame.height = 0;
+      }
+      if (i < count - 1) await sleep(33); // auf nächsten Video-Frame warten
+    }
+    return best;
+  }
+
   async function capture() {
     if (state.captureBusy || !state.user) return;
     const video = els.video;
@@ -317,10 +366,11 @@ state.track = null;
     try {
       const zoomArg = state.zoomMode === 'digital' ? state.zoom : 1;
       const { maxSide, quality } = imageSettings();
-      // Frame NUR EINMAL vom Video aufnehmen. Original und gefilterte Variante
-      // werden aus demselben Frame abgeleitet (Kopie + Filter), damit beide
-      // exakt übereinander liegen – kein Versatz wie bei zwei Aufnahmen.
-      const originalCanvas = window.TTSFilters.captureToCanvas(video, video.videoWidth, video.videoHeight, 'none', maxSide, zoomArg);
+      // Mehrere Frames aufnehmen und den schärfsten wählen – eliminiert die
+      // Bewegungsunschärfe durch die Handbewegung beim Auslösen. Original und
+      // Filter-Variante werden aus demselben (gewählten) Frame abgeleitet,
+      // damit beide exakt übereinander liegen (kein Versatz).
+      const originalCanvas = await captureSharpestFrame(video, 6, maxSide, zoomArg);
       const originalBlob = await window.TTSFilters.canvasToBlob(originalCanvas, quality);
       // Das Original geht SOFORT in den Upload – dadurch wird der Auslöser schnell
       // wieder frei (keine spürbare Verzögerung). Die Filter-Variante

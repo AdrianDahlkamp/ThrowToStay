@@ -79,6 +79,16 @@ function createEvent(db, body, createdBy = null) {
   } catch {
     throw Object.assign(new Error('Ungültiges Event-Datum.'), { status: 400 });
   }
+  // Optional: Freigabe-Zeitpunkt explizit mit angeben ("now" = sofort).
+  if (body && body.galleryUnlockAt !== undefined) {
+    if (body.galleryUnlockAt === 'now') {
+      unlockAt = util.nowIso();
+    } else {
+      const t = Date.parse(body.galleryUnlockAt);
+      if (Number.isNaN(t)) throw Object.assign(new Error('Ungültiger Freigabe-Zeitpunkt.'), { status: 400 });
+      unlockAt = new Date(t).toISOString();
+    }
+  }
 
   const { maxImageSide, jpegQuality } = parseImageSettings(body);
 

@@ -23,7 +23,7 @@
 
   const $ = id => document.getElementById(id);
   const els = {
-    eventName: $('eventName'), userLine: $('userLine'), editNameBtn: $('editNameBtn'),
+    eventName: $('eventName'), userLine: $('userLine'),
     tabCamera: $('tabCamera'), tabGallery: $('tabGallery'),
     cameraView: $('cameraView'), galleryView: $('galleryView'),
     cameraStage: $('cameraStage'), video: $('video'),
@@ -414,9 +414,10 @@ state.track = null;
     const grid = els.photoGrid;
     grid.innerHTML = '';
     const unlocked = state.event && state.event.galleryUnlocked;
+    // Sperren-Zustand wird unten im Banner erklärt – hier keine Doppel-Erklärung.
     els.galleryHint.textContent = unlocked
       ? 'Tippe auf ein Foto für die Großansicht.'
-      : 'Deine eigenen Fotos – die Gesamtgalerie folgt am Folgetag.';
+      : '';
 
     if (!state.photos.length) {
       const div = document.createElement('div');
@@ -791,8 +792,7 @@ state.track = null;
   function renderHeader() {
     els.eventName.textContent = state.event ? state.event.name : 'Event';
     if (state.user) {
-      els.userLine.textContent = `Hallo, ${state.user.firstName} ${state.user.lastName}`;
-      els.editNameBtn.textContent = 'Name ändern';
+      els.userLine.textContent = `${state.user.firstName} ${state.user.lastName}`;
     }
   }
 
@@ -916,7 +916,8 @@ state.track = null;
     }
   });
 
-  els.editNameBtn.addEventListener('click', () => showOnboard(true));
+  // Name ist klickbar → Namen ändern
+  els.userLine.addEventListener('click', () => showOnboard(true));
 
   init();
 })();

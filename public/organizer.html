@@ -33,22 +33,31 @@
         <div class="logo">ThrowToStay</div>
         <div style="color:var(--text-dim);font-size:13.5px">Veranstalter-Bereich<span id="orgLabel"></span></div>
       </div>
-      <button class="btn small secondary" id="logoutBtn" type="button">Abmelden</button>
-    </div>
-
-    <div class="create-card">
-      <h2>Neues Event anlegen</h2>
-      <form class="form-row" id="createForm">
-        <div class="field" style="flex:2 1 220px">
-          <label for="createName">Event-Name</label>
-          <input id="createName" type="text" maxlength="80" placeholder="z. B. Sommerfest 2026" required>
-        </div>
-        <button class="btn" type="submit">Event erstellen</button>
-      </form>
-      <p class="admin-note">Nur den Namen eingeben – das Datum wird automatisch auf heute gesetzt (Foto-Limit 30, Galerie-Freigabe Folgetag 08:00). Alle Details sind je Event in den Expert-Einstellungen anpassbar.</p>
+      <div class="head-actions">
+        <button class="btn small" id="newEventBtn" type="button">+ Event erstellen</button>
+        <button class="btn small secondary" id="logoutBtn" type="button">Abmelden</button>
+      </div>
     </div>
 
     <div id="eventList"></div>
+  </div>
+
+  <!-- Event-Wizard (interaktives Anlegen) -->
+  <div class="wizard-overlay" id="wizard" style="display:none">
+    <div class="wizard-card">
+      <div class="wizard-head">
+        <h2>Neues Event anlegen</h2>
+        <button class="rbtn" id="wizardClose" type="button" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="wizard-progress" id="wizardProgress"></div>
+      <div class="wizard-step" id="wizardBody"></div>
+      <div class="wizard-nav">
+        <button class="btn small secondary" id="wizardBack" type="button">Zurück</button>
+        <button class="btn small" id="wizardNext" type="button">Weiter</button>
+      </div>
+    </div>
   </div>
 
   <div id="toast"></div>

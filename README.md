@@ -96,9 +96,9 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
    herunterladen (Download-Icon).
 5. Einstellungen je Event in zwei **Tabs**: „Einstellungen“ (Name, Datum) und
    „Expert-Einstellungen“ (Foto-Limit, **max. Bildgröße (px, längste Seite)**,
-   **JPEG-Qualität (%)**, Galerie-Freigabe). Alle vier Expert-Felder tragen einen
-   **Tooltip** mit Erklärung. Speichern = Disketten-Icon, „Galerie vorab freigeben“
-   / „Galerie sperren“ schaltet die Freigabe.
+   **JPEG-Qualität (%)**, Galerie-Freigabe). Die Expert-Felder stehen untereinander
+   und tragen je einen **Tooltip** mit Erklärung. Speichern = Disketten-Icon +
+   „Speichern“, „Galerie vorab freigeben“ / „Galerie sperren“ schaltet die Freigabe.
 6. „Teilnehmer anzeigen“ (Debug, im Expert-Tab) zeigt die Teilnehmerliste mit UUID +
    Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos beider Varianten inkl.
    `manifest.csv` und `users.csv` herunter.
@@ -106,15 +106,19 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 ### Veranstalter (`/organizer`)
 
 Mit Zugangs-Schlüssel anmelden → eigene Events anlegen und verwalten (QR-Code, Limits,
-Bildqualität, Freigabe, Teilnehmerliste, Export). Einfacher Workflow: Event-Name
-eingeben → Event entsteht mit Datum = heute und Standard-Limit 30, der QR-Code ist
-sofort verfügbar. Einstellungen je Event liegen in zwei Tabs („Einstellungen“ /
-„Expert-Einstellungen“), identisch zum Admin-Panel. Keine Schlüssel-Verwaltung,
-keine fremden Events sichtbar.
+Bildqualität, Freigabe, Teilnehmerliste, Export). **„+ Event erstellen“** (neben
+„Abmelden“) öffnet einen **4-Schritte-Wizard**: ① Name, ② Foto-Limit pro Gast,
+③ Bildqualität (Slider für max. Größe + JPEG-Qualität mit **Live-Vorschau** des
+Beispielmotivs inkl. Dateigröße, Buttons „Standard“/„Empfohlen (max.)“) und
+④ Galerie-Freigabe (Button „Standard: Folgetag 08:00“). Datum = heute, danach ist der
+QR-Code sofort verfügbar. Einstellungen je Event liegen in zwei Tabs
+(„Einstellungen“ / „Expert-Einstellungen“), identisch zum Admin-Panel.
+Keine Schlüssel-Verwaltung, keine fremden Events sichtbar.
 
 ### Gäste (`/e/<SESSION-ID>`)
 
-1. QR-Code scannen → Namen eingeben (UUID liegt schon im LocalStorage).
+1. QR-Code scannen → Namen eingeben (UUID liegt schon im LocalStorage). In der
+   Kopfzeile erscheint der Name als Link – antippen öffnet die Namensänderung.
 2. Kamera: Filter auswählen (Live-Vorschau), Auslöser drücken → Upload von
    Original + gefilterter Variante; Zähler zeigt `x / 30` (Limit).
 3. Galerie-Tab: eigene Fotos sofort; nach Freigabe alle Fotos aller Gäste.

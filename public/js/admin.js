@@ -326,7 +326,7 @@
     const panelExpert = document.createElement('div');
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
-    expertGrid.className = 'settings-grid';
+    expertGrid.className = 'settings-stack';
     expertGrid.append(fLimit, fSide, fQuality, fUnlock);
     panelExpert.appendChild(expertGrid);
 
@@ -365,6 +365,7 @@
     saveBtn.type = 'button';
     saveBtn.title = 'Einstellungen speichern';
     saveBtn.appendChild(iconSvg('save'));
+    saveBtn.append(document.createTextNode(' Speichern'));
     saveBtn.addEventListener('click', async () => {
       const patch = {
         name: nameInput.value.trim(),

@@ -112,6 +112,16 @@ async function main() {
   const eventsData = await eventsList.json();
   check('Eventliste enthält Event', eventsData.events.some(e => e.id === event.id));
 
+  // Erstellen mit explizitem Freigabe-Zeitpunkt (Wizard-Weg).
+  const customUnlock = new Date(Date.now() + 3 * 3600e3).toISOString();
+  const createCustomRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'CustomUnlock', eventDate: today, galleryUnlockAt: customUnlock }),
+  });
+  check('Event mit CustomUnlock anlegen OK (201)', createCustomRes.status === 201);
+  const { event: customEvent } = await createCustomRes.json();
+  check('Freigabe-Zeitpunkt aus Body übernommen', customEvent.galleryUnlockAt === customUnlock, customEvent.galleryUnlockAt);
+
   const qr = await fetch(BASE + `/api/admin/events/${event.id}/qr.png?token=${encodeURIComponent(token)}`);
   const qrBuf = Buffer.from(await qr.arrayBuffer());
   check('QR-Code PNG ausgeliefert', qr.ok && qrBuf.length > 100 && qrBuf[0] === 0x89 && qrBuf[1] === 0x50);

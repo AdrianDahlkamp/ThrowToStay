@@ -189,13 +189,11 @@ body.event-page {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.app-header .user-line button {
-  background: none;
-  border: 0;
-  color: var(--accent);
-  font-size: 12.5px;
+/* Name ist selbst der Link zum Namen ändern */
+.app-header .user-line {
   cursor: pointer;
-  padding: 0 0 0 6px;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
 .tabs { display: flex; gap: 6px; }
@@ -713,6 +711,15 @@ body.event-page {
 }
 .settings-grid .field { margin-bottom: 0; }
 
+/* Einstellungen untereinander (ein Feld pro Zeile) */
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 380px;
+}
+.settings-stack .field { margin-bottom: 0; }
+
 /* Tabs (Einstellungen / Expert-Einstellungen) */
 .tabs {
   display: flex;
@@ -811,6 +818,84 @@ body.event-page {
   align-items: flex-end;
 }
 .create-card .field { flex: 1 1 160px; margin-bottom: 0; }
+
+/* Kopfzeile-Aktionen (z. B. „Event erstellen“ + „Abmelden“) */
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Event-Wizard (interaktives Event-Anlegen) */
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 10, 14, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.wizard-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90dvh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+}
+.wizard-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wizard-head h2 { margin: 0; font-size: 18px; }
+.wizard-step-title { margin: 16px 0 4px; font-size: 15.5px; font-weight: 700; }
+.wizard-step-text { margin: 0 0 14px; color: var(--text-dim); font-size: 13.5px; line-height: 1.45; }
+.wizard-step .field { margin-bottom: 12px; }
+.wizard-step .range-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.wizard-step input[type="range"] { flex: 1; }
+.wizard-step .range-val { min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.wizard-quick {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.wizard-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--bg-soft);
+  text-align: center;
+}
+.wizard-preview img {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto 8px;
+}
+.wizard-preview .meta { font-size: 12px; color: var(--text-dim); }
+.wizard-progress {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 4px;
+}
+.wizard-progress .dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.wizard-progress .dot.active { background: var(--accent); }
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+}
 
 .empty-state {
   text-align: center;

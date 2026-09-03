@@ -495,7 +495,7 @@ state.track = null;
     wrap.appendChild(tick);
 
     wrap.addEventListener('click', () => {
-      if (state.selectMode) toggleSelectPhoto(p); else openLightbox(p.id);
+      if (state.selectMode) toggleSelectPhoto(p); else openLightbox(p);
     });
 
     const actions = document.createElement('div');
@@ -716,7 +716,7 @@ state.track = null;
   // ------------------------------------------------------------- Lightbox
 
   function openLightbox(p) {
-    state.lbPhotoId = p.id;
+    state.lbPhotoId = typeof p === 'string' ? p : p.id;
     renderLightbox();
     els.lightbox.classList.add('visible');
   }

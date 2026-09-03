@@ -435,6 +435,30 @@ body.event-page {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+}
+.locked-banner .info-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.locked-banner .info-btn svg { width: 14px; height: 14px; }
+.locked-banner .info-btn:active { transform: scale(0.92); }
+.locked-banner .locked-details {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 .locked-banner b { color: var(--text); }
 .locked-banner.unlocked {
@@ -896,6 +920,29 @@ body.event-page {
   gap: 10px;
   margin-top: 18px;
 }
+
+/* Bestätigungsdialog (ersetzt window.confirm) */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(8, 10, 14, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.confirm-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+}
+.confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.confirm-msg { color: var(--text-dim); font-size: 13.5px; line-height: 1.5; margin-bottom: 18px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 .empty-state {
   text-align: center;

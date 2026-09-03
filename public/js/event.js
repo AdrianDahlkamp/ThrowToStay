@@ -135,6 +135,7 @@
     sparkle: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z"/><path d="M19 14l.9 2.4L21.5 16l-2.6.9L19 19l-.9-2.1-2.6-.9 2.5-.6L19 14z" opacity=".7"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
   };
 
   // ------------------------------------------------------------- Filter-UI
@@ -406,7 +407,22 @@ state.track = null;
       els.lockedBanner.innerHTML = `✓ Galerie freigeschaltet – hier sind <b>alle Fotos aller Gäste</b> dieses Events.`;
     } else {
       els.lockedBanner.classList.remove('unlocked');
-      els.lockedBanner.innerHTML = `🔒 Die <b>Galerie aller Gäste</b> wird am Folgetag um <b>08:00 Uhr</b> freigeschaltet (${whenStr}). Bis dahin siehst du nur deine eigenen Fotos.`;
+      els.lockedBanner.innerHTML = '';
+      const span = document.createElement('span');
+      span.innerHTML = `🔒 Gesamtgalerie folgt am <b>${whenStr}</b>`;
+      const infoBtn = document.createElement('button');
+      infoBtn.type = 'button';
+      infoBtn.className = 'info-btn';
+      infoBtn.title = 'Mehr erfahren';
+      infoBtn.innerHTML = ICONS.info;
+      const details = document.createElement('div');
+      details.className = 'locked-details';
+      details.style.display = 'none';
+      details.textContent = 'Bis dahin siehst du hier nur deine eigenen Fotos. Ab dem genannten Zeitpunkt sehen alle Gäste die Fotos aller Gäste.';
+      infoBtn.addEventListener('click', () => {
+        details.style.display = details.style.display === 'none' ? 'block' : 'none';
+      });
+      els.lockedBanner.append(span, infoBtn, details);
     }
   }
 

@@ -57,6 +57,54 @@
     toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2800);
   }
 
+  // Bestätigungsdialog als eigenes Modal (ersetzt window.confirm).
+  // Löst mit true (bestätigt) oder false (abgebrochen) auf.
+  function askConfirm(title, message, confirmLabel = 'Löschen') {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      const card = document.createElement('div');
+      card.className = 'confirm-card';
+      const t = document.createElement('div');
+      t.className = 'confirm-title';
+      t.textContent = title;
+      const m = document.createElement('div');
+      m.className = 'confirm-msg';
+      m.textContent = message;
+      const actions = document.createElement('div');
+      actions.className = 'confirm-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn small secondary';
+      cancel.textContent = 'Abbrechen';
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn small danger';
+      ok.textContent = confirmLabel;
+      let finished = false;
+      const done = v => {
+        if (finished) return;
+        finished = true;
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(v);
+      };
+      const onKey = ev => {
+        if (ev.key === 'Escape') done(false);
+        if (ev.key === 'Enter') done(true);
+      };
+      cancel.addEventListener('click', () => done(false));
+      ok.addEventListener('click', () => done(true));
+      overlay.addEventListener('click', ev => { if (ev.target === overlay) done(false); });
+      card.append(t, m, actions);
+      actions.append(cancel, ok);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      document.addEventListener('keydown', onKey);
+      ok.focus();
+    });
+  }
+
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString('de-DE', {
       weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -176,7 +224,7 @@
     delBtn.title = 'Event löschen';
     delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
-      if (!confirm(`Event "${e.name}" inkl. aller Fotos wirklich löschen?`)) return;
+      if (!(await askConfirm('Event löschen', `Event "${e.name}" inkl. aller Fotos wirklich löschen?`))) return;
       try {
         await api('/events/' + e.id, { method: 'DELETE' });
         toast('Event gelöscht.');
@@ -557,7 +605,7 @@
       delBtn.style.marginLeft = '6px';
       delBtn.textContent = 'Löschen';
       delBtn.addEventListener('click', async () => {
-        if (!confirm(`Schlüssel ${k.key} wirklich löschen?`)) return;
+        if (!(await askConfirm('Schlüssel löschen', `Schlüssel ${k.key} wirklich löschen?`))) return;
         try {
           await api(`/keys/${k.id}`, { method: 'DELETE' });
           toast('Schlüssel gelöscht.');

@@ -56,6 +56,14 @@ app.use('/api/admin', createAdminRouter({ db, dataDir: DATA_DIR, adminSecret, ad
 app.use('/api/organizer', createOrganizerRouter({ db, dataDir: DATA_DIR, adminSecret }));
 app.use('/api/e', createPublicRouter({ db, dataDir: DATA_DIR }));
 
+// Frontend-Dateien (HTML/JS/CSS) nie im Browser cachen: Nach UI-Änderungen muss
+// sofort die neue Version greifen – sonst trifft gecachtes altes JS auf die neue
+// HTML-Seite und die App bricht ab. (API- und Foto-Dateien dürfen gecacht werden.)
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-cache');
+  next();
+});
+
 // Start-Seite: direkt zum Veranstalter-Login (User-Login), nicht zum Admin.
 app.get('/', (req, res) => {
   res.redirect('/organizer');

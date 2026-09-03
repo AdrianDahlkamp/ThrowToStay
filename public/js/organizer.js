@@ -52,6 +52,54 @@
     toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2800);
   }
 
+  // Bestätigungsdialog als eigenes Modal (ersetzt window.confirm).
+  // Löst mit true (bestätigt) oder false (abgebrochen) auf.
+  function askConfirm(title, message, confirmLabel = 'Löschen') {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      const card = document.createElement('div');
+      card.className = 'confirm-card';
+      const t = document.createElement('div');
+      t.className = 'confirm-title';
+      t.textContent = title;
+      const m = document.createElement('div');
+      m.className = 'confirm-msg';
+      m.textContent = message;
+      const actions = document.createElement('div');
+      actions.className = 'confirm-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn small secondary';
+      cancel.textContent = 'Abbrechen';
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn small danger';
+      ok.textContent = confirmLabel;
+      let finished = false;
+      const done = v => {
+        if (finished) return;
+        finished = true;
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(v);
+      };
+      const onKey = ev => {
+        if (ev.key === 'Escape') done(false);
+        if (ev.key === 'Enter') done(true);
+      };
+      cancel.addEventListener('click', () => done(false));
+      ok.addEventListener('click', () => done(true));
+      overlay.addEventListener('click', ev => { if (ev.target === overlay) done(false); });
+      card.append(t, m, actions);
+      actions.append(cancel, ok);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      document.addEventListener('keydown', onKey);
+      ok.focus();
+    });
+  }
+
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString('de-DE', {
       weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -175,7 +223,7 @@
     delBtn.title = 'Event löschen';
     delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
-      if (!confirm(`Event "${e.name}" inkl. aller Fotos wirklich löschen?`)) return;
+      if (!(await askConfirm('Event löschen', `Event "${e.name}" inkl. aller Fotos wirklich löschen?`))) return;
       try {
         await api('/events/' + e.id, { method: 'DELETE' });
         toast('Event gelöscht.');
@@ -536,41 +584,108 @@
     body.append(h, p, quick, field);
   }
 
+  // Deterministischer Zufallsgenerator (gleiches Motiv bei jedem Render).
+  function seededRandom(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
   // Beispielmotiv für die Qualitäts-Vorschau (prozedural, kein Asset nötig).
+  // Bewusst detailreich (Grashalme, Laub, Wolken), damit JPEG-Verlusteffekte
+  // bei niedriger Qualität in der vergrößerten Detailansicht sichtbar werden.
   function drawSample(ctx, w, h) {
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, '#f97316');
-    g.addColorStop(0.5, '#e11d48');
-    g.addColorStop(1, '#7c3aed');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    const rnd = seededRandom(20260902);
+    // Himmel
+    const sky = ctx.createLinearGradient(0, 0, 0, h * 0.75);
+    sky.addColorStop(0, '#6db7dd');
+    sky.addColorStop(1, '#dceef6');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h * 0.75);
+    // Sonne
+    ctx.fillStyle = '#fff6d8';
     ctx.beginPath();
-    ctx.arc(w * 0.78, h * 0.3, Math.min(w, h) * 0.15, 0, Math.PI * 2);
+    ctx.arc(w * 0.82, h * 0.16, Math.min(w, h) * 0.07, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#1e293b';
+    // Wolken
+    for (let i = 0; i < 6; i++) {
+      const cx = rnd() * w;
+      const cy = h * (0.05 + rnd() * 0.25);
+      const s = Math.min(w, h) * (0.04 + rnd() * 0.06);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      for (let j = 0; j < 5; j++) {
+        ctx.beginPath();
+        ctx.arc(cx + (j - 2) * s * 0.7, cy + Math.sin(j) * s * 0.3, s * (0.6 + rnd() * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // Hügel in der Distanz
+    ctx.fillStyle = '#9db98a';
     ctx.beginPath();
-    ctx.moveTo(0, h);
-    ctx.lineTo(w * 0.3, h * 0.52);
-    ctx.lineTo(w * 0.55, h * 0.78);
-    ctx.lineTo(w * 0.75, h * 0.58);
-    ctx.lineTo(w, h * 0.82);
-    ctx.lineTo(w, h);
+    ctx.moveTo(0, h * 0.72);
+    ctx.quadraticCurveTo(w * 0.3, h * 0.55, w * 0.55, h * 0.7);
+    ctx.quadraticCurveTo(w * 0.8, h * 0.6, w, h * 0.72);
+    ctx.lineTo(w, h * 0.78);
+    ctx.lineTo(0, h * 0.78);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `700 ${Math.round(h * 0.12)}px Inter, sans-serif`;
-    ctx.fillText('ThrowToStay', w * 0.06, h * 0.2);
+    // Wiese
+    const grass = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    grass.addColorStop(0, '#7fa653');
+    grass.addColorStop(1, '#4f7a33');
+    ctx.fillStyle = grass;
+    ctx.fillRect(0, h * 0.74, w, h * 0.26);
+    // Viele kleine Grashalme (hohe Frequenz → zeigt Artefakte)
+    const blades = Math.floor(w / 2.5);
+    for (let i = 0; i < blades; i++) {
+      const x = rnd() * w;
+      const y = h * (0.76 + rnd() * 0.24);
+      const len = h * (0.008 + rnd() * 0.02);
+      ctx.strokeStyle = `rgba(${40 + Math.floor(rnd() * 30)},${95 + Math.floor(rnd() * 85)},${30 + Math.floor(rnd() * 25)},0.8)`;
+      ctx.lineWidth = Math.max(1, w / 900);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + (rnd() - 0.5) * 4, y - len * 0.6, x + (rnd() - 0.5) * 8, y - len);
+      ctx.stroke();
+    }
+    // Blumen
+    const flowerColors = ['#f4f4f4', '#f9e5a6', '#e8a0bf', '#c9b6e4'];
+    for (let i = 0; i < Math.floor(w / 16); i++) {
+      const x = rnd() * w;
+      const y = h * (0.8 + rnd() * 0.18);
+      ctx.fillStyle = flowerColors[Math.floor(rnd() * flowerColors.length)];
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1.5, w / 400), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Baum mit Laub
+    const bx = w * 0.18;
+    const by = h * 0.78;
+    ctx.fillStyle = '#6b4a2b';
+    ctx.fillRect(bx - w * 0.012, by - h * 0.24, w * 0.024, h * 0.24);
+    for (let i = 0; i < 26; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = rnd() * w * 0.055;
+      ctx.fillStyle = `rgba(${50 + Math.floor(rnd() * 40)},${110 + Math.floor(rnd() * 50)},${40 + Math.floor(rnd() * 30)},0.9)`;
+      ctx.beginPath();
+      ctx.arc(bx + Math.cos(a) * r, by - h * 0.28 + Math.sin(a) * r * 0.7, w * 0.018 + rnd() * w * 0.012, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   let previewToken = 0;
+  let stdSizeKb = null; // Referenz: Dateigröße der Standard-Einstellung (1600 px / 92 %)
   function renderWizImage(body) {
     const h = document.createElement('div');
     h.className = 'wizard-step-title';
     h.textContent = 'Wie hoch soll die Fotoqualität sein?';
     const p = document.createElement('p');
     p.className = 'wizard-step-text';
-    p.textContent = 'Größere Bilder und höhere JPEG-Qualität geben mehr Detail, erzeugen aber deutlich größere Dateien. Die Vorschau zeigt ein Beispielfoto in der gewählten Einstellung.';
+    p.textContent = 'Größere Bilder und höhere JPEG-Qualität geben mehr Detail, erzeugen aber deutlich größere Dateien. Die Vorschau zeigt eine vergrößerte Detailansicht des Beispielmotivs in der gewählten Einstellung – so siehst du, wie stark die Kompression feine Details verschmiert.';
     const quick = document.createElement('div');
     quick.className = 'wizard-quick';
     const qStd = document.createElement('button');
@@ -634,9 +749,22 @@
 
     const prev = document.createElement('div');
     prev.className = 'wizard-preview';
-    prev.innerHTML = '<img id="wizPreviewImg" alt="Vorschau"><div class="meta" id="wizPreviewMeta">…</div>';
+    prev.innerHTML = '<img id="wizPreviewImg" alt="Detail-Vorschau"><div class="meta" id="wizPreviewMeta">…</div>';
     body.append(fSide, fQual, prev);
     updatePreview();
+
+    // Referenz-Größe der Standard-Einstellung (1600 px / 92 %), einmal berechnet.
+    if (stdSizeKb === null) {
+      const s = document.createElement('canvas');
+      s.width = 1600;
+      s.height = 1200;
+      drawSample(s.getContext('2d'), 1600, 1200);
+      s.toBlob(b => { stdSizeKb = b ? Math.round(b.size / 1024) : null; }, 'image/jpeg', 0.92);
+    }
+
+    // Ausschnitt (in Pixeln des Zielbildes) und Vergrößerung der Detailansicht.
+    const DETAIL_CROP = 360;
+    const DETAIL_SCALE = 2;
 
     function updatePreview() {
       const token = ++previewToken;
@@ -653,16 +781,34 @@
       const dctx = dst.getContext('2d');
       dctx.imageSmoothingQuality = 'high';
       dctx.drawImage(src, 0, 0, w, hh);
-      dst.toBlob(blob => {
-        if (token !== previewToken || !blob) return;
-        const img = document.getElementById('wizPreviewImg');
-        const meta = document.getElementById('wizPreviewMeta');
-        if (!img || !meta) return;
-        if (img.dataset.src) URL.revokeObjectURL(img.dataset.src);
-        const url = URL.createObjectURL(blob);
-        img.dataset.src = url;
-        img.src = url;
-        meta.textContent = `${w} × ${hh} px · JPEG ${wiz.jpegQuality} % · ≈ ${Math.max(1, Math.round(blob.size / 1024))} KB`;
+      // Vollbild in der gewählten Qualität encodieren → echte Dateigröße.
+      dst.toBlob(fullBlob => {
+        if (token !== previewToken || !fullBlob) return;
+        // Detail-Ausschnitt aus der Bildmitte, vergrößelt dargestellt.
+        const crop = Math.min(DETAIL_CROP, w, hh);
+        const detail = document.createElement('canvas');
+        detail.width = crop * DETAIL_SCALE;
+        detail.height = crop * DETAIL_SCALE;
+        const dctx2 = detail.getContext('2d');
+        dctx2.imageSmoothingQuality = 'high';
+        dctx2.drawImage(dst, (w - crop) / 2, (hh - crop) / 2, crop, crop, 0, 0, detail.width, detail.height);
+        detail.toBlob(detBlob => {
+          if (token !== previewToken || !detBlob) return;
+          const img = document.getElementById('wizPreviewImg');
+          const meta = document.getElementById('wizPreviewMeta');
+          if (!img || !meta) return;
+          if (img.dataset.src) URL.revokeObjectURL(img.dataset.src);
+          const url = URL.createObjectURL(detBlob);
+          img.dataset.src = url;
+          img.src = url;
+          const kb = Math.max(1, Math.round(fullBlob.size / 1024));
+          let compare = '';
+          if (stdSizeKb !== null && (wiz.maxSide !== 1600 || wiz.jpegQuality !== 92)) {
+            const diff = kb - stdSizeKb;
+            compare = diff >= 0 ? ` · ${diff} KB mehr als Standard` : ` · ${-diff} KB weniger als Standard`;
+          }
+          meta.textContent = `Detailansicht (${DETAIL_SCALE}× vergrößert) · gespeichert als ${w} × ${hh} px · JPEG ${wiz.jpegQuality} % · ≈ ${kb} KB${compare}`;
+        }, 'image/jpeg', wiz.jpegQuality / 100);
       }, 'image/jpeg', wiz.jpegQuality / 100);
     }
   }

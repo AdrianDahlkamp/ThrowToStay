@@ -23,7 +23,9 @@ gemeinsame Galerie aller Gäste.
   **Gast** (scannt den QR-Code und macht Fotos).
 - **Galerie-Freigabe**: Vor der Freigabe sieht jeder Gast nur die eigenen Fotos. Am
   Folgetag um 08:00 Uhr (berechnet aus dem Event-Datum, manuell überschreibbar) sieht
-  jeder Gast die gesamte Galerie aller Gäste des Events.
+  jeder Gast die gesamte Galerie aller Gäste des Events. In der Gast-App bleibt der
+  Sperr-Banner kurz („Gesamtgalerie folgt am …“) – ein runder (i)-Button zeigt die
+  genauere Erklärung.
 - **Namens-Overlay**: In der Galerie steht unten rechts auf jedem Bild der Name in
   Schreibschrift (Google-Font „Great Vibes“). Das Overlay ist rein kosmetisch (CSS) und
   wird **nicht** in die Bilddateien eingebrannt.
@@ -102,14 +104,19 @@ ADMIN_PASSWORD="mein-sicheres-passwort" npm start
 6. „Teilnehmer anzeigen“ (Debug, im Expert-Tab) zeigt die Teilnehmerliste mit UUID +
    Fotoanzahl; „Alles exportieren (ZIP)“ lädt alle Fotos beider Varianten inkl.
    `manifest.csv` und `users.csv` herunter.
+7. Destruktive Aktionen (Event oder Schlüssel löschen) öffnen ein **eigenes
+   Bestätigungs-Modal** (Escape/Abbrechen = nein, Enter = ja) statt des Browser-Dialogs;
+   dasselbe gilt im Veranstalter-Panel.
 
 ### Veranstalter (`/organizer`)
 
 Mit Zugangs-Schlüssel anmelden → eigene Events anlegen und verwalten (QR-Code, Limits,
 Bildqualität, Freigabe, Teilnehmerliste, Export). **„+ Event erstellen“** (neben
 „Abmelden“) öffnet einen **4-Schritte-Wizard**: ① Name, ② Foto-Limit pro Gast,
-③ Bildqualität (Slider für max. Größe + JPEG-Qualität mit **Live-Vorschau** des
-Beispielmotivs inkl. Dateigröße, Buttons „Standard“/„Empfohlen (max.)“) und
+③ Bildqualität (Slider für max. Größe + JPEG-Qualität mit **Live-Preview**: eine
+vergrößerte Detailansicht des Beispielmotivs in der gewählten Einstellung, damit
+Kompressionsverluste sichtbar werden, inkl. Dateigröße und Vergleich zum Standard,
+Buttons „Standard“/„Empfohlen (max.)“) und
 ④ Galerie-Freigabe (Button „Standard: Folgetag 08:00“). Datum = heute, danach ist der
 QR-Code sofort verfügbar. Einstellungen je Event liegen in zwei Tabs
 („Einstellungen“ / „Expert-Einstellungen“), identisch zum Admin-Panel.
@@ -148,6 +155,10 @@ test/smoke.mjs              Smoke-Tests aller Kernabläufe (npm test)
 
 Die Foto-Dateien liegen bewusst als UUID-Pfadstruktur auf der Platte:
 `data/photos/<event-session>/<user-uuid>/<zeitstempel>-<nr>-original.jpg` (bzw. `-filtered.jpg`).
+
+Frontend-Dateien (HTML/JS/CSS) werden mit `Cache-Control: no-cache` ausgeliefert, damit
+nach UI-Änderungen sofort die neue Version greift und gecachtes altes JS nicht auf die
+neue HTML-Seite trifft. (API- und Foto-Dateien dürfen weiterhin gecacht werden.)
 
 ## Tests
 

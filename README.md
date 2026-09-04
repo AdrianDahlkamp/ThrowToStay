@@ -177,6 +177,29 @@ Varianten (inkl. UUID-Ordner auf der Platte), Galerie-Sperre vor Freigabe, Re-Fi
 Bildkomprimierung, Veranstalter-Keys (Anlegen, Login, Isolation, Sperren),
 Freigabe-Logik, Sammel-Download-ZIP und Admin-Export.
 
+## Deployment & Update (Git-basiert)
+
+Der Server läuft als systemd-User-Service `throwtostay` (Port 3742) und nutzt dieses
+Repos als Quellcode-Quelle. Das Repo ist öffentlich, daher kann der Server ohne
+Zugangsdaten ziehen.
+
+Ein Update ausführen (als root auf dem Server):
+
+```bash
+bash /opt/throwtostay/scripts/update.sh
+```
+
+Das Skript:
+1. `git fetch` + **Fast-Forward-Merge** auf `main` (überschreibt keine lokalen Änderungen),
+2. installiert npm-Abhängigkeiten **nur**, wenn sich `package.json`/`package-lock.json`
+   geändert haben,
+3. setzt die Ownership von `src`/`public` auf den Service-User,
+4. startet den Service neu und führt einen **Health-Check** durch,
+5. rollt bei einem Fehler **automatisch** auf den vorherigen Commit zurück.
+
+Die Daten (`data/`: Datenbank + Fotos) und `.env` liegen außerhalb der Versionierung
+und bleiben bei jedem Update erhalten.
+
 ## Bekannte Grenzen
 
 - Die UUID ist an den Browser/LocalStorage gebunden: Löscht ein Gast seine Browserdaten

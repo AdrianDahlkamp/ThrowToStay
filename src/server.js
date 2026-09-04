@@ -49,8 +49,37 @@ const adminSecret = util.loadOrCreateAdminSecret(DATA_DIR);
 // ------------------------------------------------------------ Express-App
 
 const app = express();
-app.set('trust proxy', true);
+// trust proxy nur für das konkrete Zoraxy-Gateway (10.12.95.250): X-Forwarded-*
+// wird nur von diesem Peer akzeptiert – von außen ist XFF-Spoofing unmöglich,
+// und der Login-Rate-Limit-Key (req.ip) kann nicht mehr per XFF gedreht werden.
+app.set('trust proxy', '10.12.95.250');
 app.disable('x-powered-by');
+
+// ------------------------------------------------------------ Security-Header
+// Clickjacking (X-Frame-Options + CSP frame-ancestors), MIME-Sniffing, Referrer,
+// Kamera nur im eigenen Kontext. CSP ist auf die App abgestimmt: keine
+// Inline-Scripts (nur externe /js/*.js), extern nur Google Fonts, blob:/data:
+// für Kamera-Canvas.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=()');
+  res.setHeader('Content-Security-Policy', CSP);
+  next();
+});
 
 app.use('/api/admin', createAdminRouter({ db, dataDir: DATA_DIR, adminSecret, adminPassword: ADMIN_PASSWORD }));
 app.use('/api/organizer', createOrganizerRouter({ db, dataDir: DATA_DIR, adminSecret }));

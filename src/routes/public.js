@@ -35,7 +35,11 @@ function createPublicRouter({ db, dataDir }) {
       destination: (req, file, cb) => cb(null, path.join(dataDir, 'tmp')),
       filename: (req, file, cb) => cb(null, `up-${util.generateId()}`),
     }),
-    limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 10 },
+    // fieldArrayIndexLimit aktiviert die opt-in-DoS-Abwehr (CVE-2026-82333):
+  // überdimensionierte Array-Indizes in Multipart-Fieldnamen werden verworfen,
+  // statt den Node-Event-Loop einzufrieren. Die App nutzt keine Array-Fields,
+  // 100 ist großzügiger Headroom.
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 10, fieldArrayIndexLimit: 100 },
   });
 
   // ---------------------------------------------------------------- Helpers

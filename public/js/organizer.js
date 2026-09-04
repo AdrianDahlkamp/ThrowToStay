@@ -247,7 +247,11 @@
     const qr = document.createElement('img');
     qr.className = 'qr-img';
     qr.alt = 'QR-Code';
-    qr.src = `/api/organizer/events/${e.id}/qr.png?token=${encodeURIComponent(token)}`;
+    // QR per Blob + Authorization-Header laden – kein Token in der URL
+    // (würde sonst in Proxy-/Browser-Logs landen).
+    api('/events/' + e.id + '/qr.png')
+      .then(blob => { qr.src = URL.createObjectURL(blob); })
+      .catch(() => { qr.removeAttribute('src'); });
     share.appendChild(qr);
 
     const urlLine = document.createElement('div');

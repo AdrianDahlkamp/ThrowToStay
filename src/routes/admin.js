@@ -11,6 +11,7 @@
 
 const express = require('express');
 const path = require('path');
+const crypto = require('node:crypto');
 const QRCode = require('qrcode');
 const archiver = require('archiver');
 const util = require('../util');
@@ -29,7 +30,9 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
   }
 
   // Mini-Rate-Limit für Fehlversuche beim Login.
-  const loginFails = new Map(); // ip -> { count, blockedUntil }
+  // lastSeen wird mitgepflegt, damit inaktive IPs regelmäßig aus der Map
+  // entfernt werden (verhindert unbegrenztes Wachstum bei vielen Quell-IPs).
+  const loginFails = new Map(); // ip -> { count, blockedUntil, lastSeen }
 
   function requireAdmin(req, res, next) {
     if (util.verifyAdminToken(adminSecret, tokenFromReq(req))) return next();
@@ -38,24 +41,46 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
 
   const MAX_LOGIN_FAILS = 5;
   const LOGIN_BLOCK_MS = 30_000;
+  const LOGIN_ENTRY_TTL_MS = 10 * 60_000; // inaktive Einträge nach 10 min verwerfen
+
+  // Zeitlich sicherer Passwortvergleich: beide Seiten mit SHA-256 auf fixe
+  // Länge (32 B) bringen und constant-time vergleichen (kein Timing-Leak).
+  function passwordMatches(input, expected) {
+    const a = crypto.createHash('sha256').update(String(input)).digest();
+    const b = crypto.createHash('sha256').update(String(expected)).digest();
+    return crypto.timingSafeEqual(a, b);
+  }
+
+  // Regelmäßige Räumung inaktiver Rate-Limit-Einträge (unref = hält Process
+  // im Test nicht am Leben).
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, e] of loginFails) {
+      const stillBlocked = e.blockedUntil && now < e.blockedUntil;
+      if (!stillBlocked && now - (e.lastSeen || 0) > LOGIN_ENTRY_TTL_MS) loginFails.delete(ip);
+    }
+  }, 60_000).unref();
 
   router.post('/login', express.json(), (req, res) => {
     const ip = req.ip || 'unbekannt';
-    const entry = loginFails.get(ip) || { count: 0, blockedUntil: 0 };
-    if (Date.now() < entry.blockedUntil) {
-      const secs = Math.ceil((entry.blockedUntil - Date.now()) / 1000);
+    const now = Date.now();
+    const entry = loginFails.get(ip) || { count: 0, blockedUntil: 0, lastSeen: now };
+    entry.lastSeen = now;
+    if (entry.blockedUntil && now < entry.blockedUntil) {
+      const secs = Math.ceil((entry.blockedUntil - now) / 1000);
       return res.status(429).json({ error: `Zu viele Fehlversuche – bitte ${secs} Sekunden warten.` });
     }
     // Whitespace (z. B. aus Passwort-Managern/Clipboard) nicht mitzählen.
     const password = String((req.body || {}).password || '').trim();
-    if (password !== adminPassword) {
+    if (!passwordMatches(password, adminPassword)) {
       entry.count += 1;
-      loginFails.set(ip, entry);
       if (entry.count >= MAX_LOGIN_FAILS) {
-        entry.blockedUntil = Date.now() + LOGIN_BLOCK_MS;
+        entry.blockedUntil = now + LOGIN_BLOCK_MS;
         entry.count = 0;
+        loginFails.set(ip, entry);
         return res.status(429).json({ error: 'Zu viele Fehlversuche – bitte 30 Sekunden warten.' });
       }
+      loginFails.set(ip, entry);
       return res.status(401).json({ error: `Falsches Passwort (noch ${MAX_LOGIN_FAILS - entry.count} Versuche).` });
     }
     loginFails.delete(ip);

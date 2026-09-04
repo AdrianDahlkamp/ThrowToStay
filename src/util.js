@@ -89,33 +89,59 @@ function loadOrCreateAdminSecret(dataDir) {
   return secret;
 }
 
-function createAdminToken(secret) {
-  return crypto.createHmac('sha256', secret).update('admin-session-v1').digest('hex');
+// Token-Gültigkeitsdauer. Damit ist ein (z. B. per ?token=) geleaktes Token nur
+// noch für eine begrenzte Zeit brauchbar, statt dauerhaft.
+const ADMIN_TOKEN_TTL_SECONDS = 8 * 3600;          // 8 Stunden
+const ORGANIZER_TOKEN_TTL_SECONDS = 7 * 24 * 3600; // 7 Tage
+
+/**
+ * Admin-Session-Token: "<expHex>.<hmac>". expHex = Ablaufzeitpunkt (Epoch s,
+ * hex), hmac über "admin-v2:<expHex>". Zeitlich begrenzt, ohne DB-Treffer
+ * verifizierbar.
+ */
+function createAdminToken(secret, ttlSeconds = ADMIN_TOKEN_TTL_SECONDS) {
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const expHex = exp.toString(16);
+  const mac = crypto.createHmac('sha256', secret).update(`admin-v2:${expHex}`).digest('hex');
+  return `${expHex}.${mac}`;
 }
 
 function verifyAdminToken(secret, token) {
-  if (typeof token !== 'string' || token.length === 0) return false;
-  const expected = createAdminToken(secret);
+  if (typeof token !== 'string') return false;
+  const dot = token.indexOf('.');
+  if (dot < 1) return false;
+  const expHex = token.slice(0, dot);
+  const mac = token.slice(dot + 1);
+  if (!/^[0-9a-f]{1,16}$/.test(expHex) || !mac) return false;
+  const exp = parseInt(expHex, 16);
+  if (!Number.isSafeInteger(exp) || exp <= Math.floor(Date.now() / 1000)) return false;
+  const expected = crypto.createHmac('sha256', secret).update(`admin-v2:${expHex}`).digest('hex');
   const a = Buffer.from(expected);
-  const b = Buffer.from(token);
+  const b = Buffer.from(mac);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
 
 /**
- * Veranstalter-Session-Token: "<keyId>.<hmac>", ohne Datenbank-Treffer
+ * Veranstalter-Session-Token: "<keyId>.<expHex>.<hmac>", ohne Datenbank-Treffer
  * verifizierbar (ob der Key gesperrt ist, wird je Request in der DB geprüft).
  */
-function createOrganizerToken(secret, keyId) {
-  const mac = crypto.createHmac('sha256', secret).update(`organizer-v1:${keyId}`).digest('hex');
-  return `${keyId}.${mac}`;
+function createOrganizerToken(secret, keyId, ttlSeconds = ORGANIZER_TOKEN_TTL_SECONDS) {
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const expHex = exp.toString(16);
+  const mac = crypto.createHmac('sha256', secret).update(`organizer-v2:${keyId}:${expHex}`).digest('hex');
+  return `${keyId}.${expHex}.${mac}`;
 }
 
 function verifyOrganizerToken(secret, token) {
-  if (typeof token !== 'string' || !token.includes('.')) return null;
-  const [keyId, mac] = token.split('.');
-  if (!keyId || !mac) return null;
-  const expected = crypto.createHmac('sha256', secret).update(`organizer-v1:${keyId}`).digest('hex');
+  if (typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [keyId, expHex, mac] = parts;
+  if (!keyId || !/^[0-9a-f]{1,16}$/.test(expHex) || !mac) return null;
+  const exp = parseInt(expHex, 16);
+  if (!Number.isSafeInteger(exp) || exp <= Math.floor(Date.now() / 1000)) return null;
+  const expected = crypto.createHmac('sha256', secret).update(`organizer-v2:${keyId}:${expHex}`).digest('hex');
   const a = Buffer.from(expected);
   const b = Buffer.from(String(mac));
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;

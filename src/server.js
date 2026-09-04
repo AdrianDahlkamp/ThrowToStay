@@ -124,8 +124,17 @@ app.use((err, req, res, next) => {
   if (err && err.name === 'MulterError') {
     status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
   }
-  if (status >= 500) console.error(err);
-  res.status(status).json({ error: err.message || 'Interner Serverfehler.' });
+  if (status >= 500) {
+    // Nur serverseitig loggen; interne Details (Dateipfade, SQL, Stack) niemals
+    // ans Client liefern.
+    console.error(err);
+    return res.status(500).json({ error: 'Interner Serverfehler. Bitte später erneut versuchen.' });
+  }
+  // 4xx: App-Meldung ist kontrolliert und client-tauglich (Multer-Fehler übersetzen).
+  const message = err && err.name === 'MulterError'
+    ? 'Upload abgelehnt (Datei zu groß oder ungültig).'
+    : (err && err.message) || 'Fehler.';
+  res.status(status).json({ error: message });
 });
 
 // ------------------------------------------------------------ HTTPS (optional)

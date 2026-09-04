@@ -29,19 +29,10 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     return req.query.token;
   }
 
-  // Mini-Rate-Limit für Fehlversuche beim Login.
-  // lastSeen wird mitgepflegt, damit inaktive IPs regelmäßig aus der Map
-  // entfernt werden (verhindert unbegrenztes Wachstum bei vielen Quell-IPs).
-  const loginFails = new Map(); // ip -> { count, blockedUntil, lastSeen }
-
   function requireAdmin(req, res, next) {
     if (util.verifyAdminToken(adminSecret, tokenFromReq(req))) return next();
     res.status(401).json({ error: 'Nicht angemeldet.' });
   }
-
-  const MAX_LOGIN_FAILS = 5;
-  const LOGIN_BLOCK_MS = 30_000;
-  const LOGIN_ENTRY_TTL_MS = 10 * 60_000; // inaktive Einträge nach 10 min verwerfen
 
   // Zeitlich sicherer Passwortvergleich: beide Seiten mit SHA-256 auf fixe
   // Länge (32 B) bringen und constant-time vergleichen (kein Timing-Leak).
@@ -51,39 +42,26 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
     return crypto.timingSafeEqual(a, b);
   }
 
-  // Regelmäßige Räumung inaktiver Rate-Limit-Einträge (unref = hält Process
-  // im Test nicht am Leben).
-  setInterval(() => {
-    const now = Date.now();
-    for (const [ip, e] of loginFails) {
-      const stillBlocked = e.blockedUntil && now < e.blockedUntil;
-      if (!stillBlocked && now - (e.lastSeen || 0) > LOGIN_ENTRY_TTL_MS) loginFails.delete(ip);
-    }
-  }, 60_000).unref();
+  // Mini-Rate-Limit für Login-Fehlversuche (Brute-Force-Schutz, geteilter
+  // Helfer aus util.js; räumt inaktive IP-Einträge selbst auf).
+  const loginLimiter = util.createLoginRateLimiter();
 
   router.post('/login', express.json(), (req, res) => {
     const ip = req.ip || 'unbekannt';
-    const now = Date.now();
-    const entry = loginFails.get(ip) || { count: 0, blockedUntil: 0, lastSeen: now };
-    entry.lastSeen = now;
-    if (entry.blockedUntil && now < entry.blockedUntil) {
-      const secs = Math.ceil((entry.blockedUntil - now) / 1000);
-      return res.status(429).json({ error: `Zu viele Fehlversuche – bitte ${secs} Sekunden warten.` });
+    const blk = loginLimiter.isBlocked(ip);
+    if (blk.blocked) {
+      return res.status(429).json({ error: `Zu viele Fehlversuche – bitte ${blk.waitSecs} Sekunden warten.` });
     }
     // Whitespace (z. B. aus Passwort-Managern/Clipboard) nicht mitzählen.
     const password = String((req.body || {}).password || '').trim();
     if (!passwordMatches(password, adminPassword)) {
-      entry.count += 1;
-      if (entry.count >= MAX_LOGIN_FAILS) {
-        entry.blockedUntil = now + LOGIN_BLOCK_MS;
-        entry.count = 0;
-        loginFails.set(ip, entry);
+      const r = loginLimiter.recordFail(ip);
+      if (r.blocked) {
         return res.status(429).json({ error: 'Zu viele Fehlversuche – bitte 30 Sekunden warten.' });
       }
-      loginFails.set(ip, entry);
-      return res.status(401).json({ error: `Falsches Passwort (noch ${MAX_LOGIN_FAILS - entry.count} Versuche).` });
+      return res.status(401).json({ error: `Falsches Passwort (noch ${r.remaining} Versuche).` });
     }
-    loginFails.delete(ip);
+    loginLimiter.reset(ip);
     res.json({ token: util.createAdminToken(adminSecret) });
   });
 
@@ -236,7 +214,8 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
       ).all(e.id);
       const usersCsv = ['uuid;vorname;nachname;registriert-am;fotoanzahl'];
       for (const u of userRows) {
-        usersCsv.push(`${u.uuid};${u.first_name};${u.last_name};${u.created_at};${u.photo_count}`);
+        usersCsv.push([u.uuid, u.first_name, u.last_name, u.created_at, u.photo_count]
+          .map(util.csvCell).join(';'));
       }
 
       const zip = archiver('zip', { zlib: { level: 9 } });
@@ -258,7 +237,8 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
             `${String(++index).padStart(4, '0')}-${r.last_name}-${r.first_name}-${stamp}-${variant}`
           ) + path.extname(filename);
           zip.file(path.join(photosRoot, e.session_id, r.uuid, filename), { name: entryName });
-          manifest.push(`${entryName};${r.id};${r.uuid};${r.first_name};${r.last_name};${r.created_at};${variant};${r.filter_id || '-'}`);
+          manifest.push([entryName, r.id, r.uuid, r.first_name, r.last_name, r.created_at, variant, r.filter_id || '-']
+            .map(util.csvCell).join(';'));
         }
       }
       zip.append('\uFEFF' + manifest.join('\r\n') + '\r\n', { name: 'manifest.csv' });

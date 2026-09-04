@@ -25,6 +25,9 @@ const util = require('../util');
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB pro Bilddatei
 const MAX_ZIP_ITEMS = 500;
+// Harte Obergrenze je Event (DoS-Backstop): begrenzt die Gesamtdisk auch, wenn
+// sich Angreifer per UUID-Rotation unbegrenzt neue "Gäste" erschließen.
+const MAX_PHOTOS_PER_EVENT = 20000;
 
 function createPublicRouter({ db, dataDir }) {
   const router = express.Router();
@@ -157,6 +160,11 @@ function createPublicRouter({ db, dataDir }) {
       if (count >= event.max_photos_per_user) {
         return res.status(409).json({ error: `Das Limit von ${event.max_photos_per_user} Fotos ist erreicht.` });
       }
+      // Harte Obergrenze je Event (DoS-Backstop gegen UUID-Rotation).
+      const totalInEvent = db.prepare('SELECT COUNT(*) AS c FROM photos WHERE event_id = ?').get(event.id).c;
+      if (totalInEvent >= MAX_PHOTOS_PER_EVENT) {
+        return res.status(409).json({ error: 'Das Foto-Limit für dieses Event ist erreicht.' });
+      }
       if (!req.files || !req.files.original || !req.files.original[0]) {
         return res.status(400).json({ error: 'Kein Foto empfangen.' });
       }
@@ -288,10 +296,17 @@ function createPublicRouter({ db, dataDir }) {
         }
         db.prepare('UPDATE photos SET filtered_file = NULL, filter_id = NULL WHERE id = ?').run(photo.id);
       } else {
-        // Erzeugen/Ersetzen der Filter-Variante: der Besitzer immer, jeder
-        // weitere Gast nach Galerie-Freigabe (die Fotos sind dann öffentlich).
+        // Filter-Variante erzeugen/ersetzen:
+        //  - fehlt noch: Besitzer immer, jeder weitere Gast nach Freigabe
+        //    (damit fehlende Varianten nachträglich verfügbar werden).
+        //  - existiert schon: NUR der Besitzer – ein Gast darf die Variante eines
+        //    fremden Fotos nicht überschreiben (Integrität).
+        const hasExisting = !!photo.filtered_file;
         if (!isOwner && !isGalleryUnlocked(event)) {
           return res.status(403).json({ error: 'Die Galerie ist noch nicht freigeschaltet.' });
+        }
+        if (hasExisting && !isOwner) {
+          return res.status(403).json({ error: 'Nur der Foto-Besitzer kann diese Filter-Variante ersetzen.' });
         }
         if (!req.file) return res.status(400).json({ error: 'Gefiltertes Bild fehlt.' });
         const baseName = photo.original_file.replace(/-original\.[a-z0-9]+$/i, '');
@@ -349,9 +364,8 @@ function createPublicRouter({ db, dataDir }) {
         ) + ext;
 
         zip.file(storedPathFor(event, owner.uuid, filename), { name: entryName });
-        manifestRows.push(
-          `${entryName};${photo.id};${owner.uuid};${owner.first_name};${owner.last_name};${photo.created_at};${wantFiltered ? 'filter' : 'original'};${photo.filter_id || '-'}`
-        );
+        manifestRows.push([entryName, photo.id, owner.uuid, owner.first_name, owner.last_name, photo.created_at, wantFiltered ? 'filter' : 'original', photo.filter_id || '-']
+          .map(util.csvCell).join(';'));
       }
 
       // Manifest: ordnet jede Datei der UUID und dem Namen zu.

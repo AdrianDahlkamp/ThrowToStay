@@ -84,6 +84,14 @@ function openDb(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(path.join(dataDir, 'photos'), { recursive: true });
   fs.mkdirSync(path.join(dataDir, 'tmp'), { recursive: true });
+  // data/ enthält DB, Fotos und das Admin-Secret → nur für den Service-User
+  // lesbar (kein world-readable). Bestehende Verzeichnisse explizit setzen;
+  // unter photos/ bleibt alles durch das 700-Elternverzeichnis geschützt.
+  try {
+    fs.chmodSync(dataDir, 0o700);
+    fs.chmodSync(path.join(dataDir, 'photos'), 0o700);
+    fs.chmodSync(path.join(dataDir, 'tmp'), 0o700);
+  } catch { /* z. B. im Test nicht der Owner – nicht kritisch */ }
 
   const db = new DatabaseSync(path.join(dataDir, 'throwtostay.db'));
   db.exec('PRAGMA journal_mode = WAL;');

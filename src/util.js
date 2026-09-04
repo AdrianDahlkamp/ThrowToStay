@@ -153,6 +153,60 @@ function isSafeStoredFilename(name) {
   return typeof name === 'string' && /^[A-Za-z0-9._-]+$/.test(name) && !name.includes('..');
 }
 
+/**
+ * CSV-Zelle sicher formatieren. Neutralisiert CSV-Formel-Injection (Zellen, die
+ * mit =, +, -, @, TAB oder CR beginnen, würden Excel/Sheets als Formel ausführen)
+ * und bindet Zellen mit Trennzeichen/Anführungszeichen/Umbrüchen korrekt ein.
+ */
+function csvCell(value) {
+  let s = String(value == null ? '' : value);
+  if (/^[=+\-\t\r@]/.test(s)) s = `'${s}`;
+  if (/[";\r\n]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/**
+ * Kleiner in-Memory-Rate-Limiter für Login-Fehlversuche pro IP (verhindert
+ * Brute-Force). Map räumt inaktive Einträge selbst auf (unref = hält den
+ * Prozess im Test nicht am Leben). Liefert isBlocked / recordFail / reset.
+ */
+function createLoginRateLimiter({ maxFails = 5, blockMs = 30_000, entryTtlMs = 10 * 60_000 } = {}) {
+  const fails = new Map(); // ip -> { count, blockedUntil, lastSeen }
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, e] of fails) {
+      const stillBlocked = e.blockedUntil && now < e.blockedUntil;
+      if (!stillBlocked && now - (e.lastSeen || 0) > entryTtlMs) fails.delete(ip);
+    }
+  }, 60_000).unref();
+  return {
+    isBlocked(ip) {
+      const e = fails.get(ip);
+      if (e && e.blockedUntil && Date.now() < e.blockedUntil) {
+        return { blocked: true, waitSecs: Math.ceil((e.blockedUntil - Date.now()) / 1000) };
+      }
+      return { blocked: false };
+    },
+    recordFail(ip) {
+      const now = Date.now();
+      const e = fails.get(ip) || { count: 0, blockedUntil: 0, lastSeen: now };
+      e.lastSeen = now;
+      e.count += 1;
+      if (e.count >= maxFails) {
+        e.blockedUntil = now + blockMs;
+        e.count = 0;
+        fails.set(ip, e);
+        return { blocked: true, remaining: 0 };
+      }
+      fails.set(ip, e);
+      return { blocked: false, remaining: maxFails - e.count };
+    },
+    reset(ip) {
+      fails.delete(ip);
+    },
+  };
+}
+
 module.exports = {
   generateSessionId,
   generateAccessKey,
@@ -168,4 +222,6 @@ module.exports = {
   createOrganizerToken,
   verifyOrganizerToken,
   isSafeStoredFilename,
+  csvCell,
+  createLoginRateLimiter,
 };

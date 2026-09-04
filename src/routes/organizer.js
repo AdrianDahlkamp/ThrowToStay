@@ -37,12 +37,29 @@ function createOrganizerRouter({ db, dataDir, adminSecret }) {
     return k;
   }
 
+  // Rate-Limit für Login-Fehlversuche (Brute-Force-Schutz, Parität mit dem
+  // Admin-Login). Schlüssel sind 8 Zeichen aus 20 Buchstaben (≈ 25 Mrd.) und
+  // damit praktisch nicht zu raten – der Limiter ist Defense-in-Depth.
+  const loginLimiter = util.createLoginRateLimiter();
+
   router.post('/login', express.json(), (req, res) => {
+    const ip = req.ip || 'unbekannt';
+    const blk = loginLimiter.isBlocked(ip);
+    if (blk.blocked) {
+      return res.status(429).json({ error: `Zu viele Fehlversuche – bitte ${blk.waitSecs} Sekunden warten.` });
+    }
     const raw = String((req.body || {}).key || '').trim().toUpperCase();
     if (!raw) return res.status(400).json({ error: 'Bitte einen Schlüssel eingeben.' });
     const k = db.prepare('SELECT * FROM user_keys WHERE key = ?').get(raw);
-    if (!k) return res.status(401).json({ error: 'Unbekannter Schlüssel.' });
-    if (k.revoked) return res.status(401).json({ error: 'Dieser Schlüssel wurde gesperrt.' });
+    if (!k) {
+      loginLimiter.recordFail(ip);
+      return res.status(401).json({ error: 'Unbekannter Schlüssel.' });
+    }
+    if (k.revoked) {
+      loginLimiter.recordFail(ip);
+      return res.status(401).json({ error: 'Dieser Schlüssel wurde gesperrt.' });
+    }
+    loginLimiter.reset(ip);
     res.json({
       token: util.createOrganizerToken(adminSecret, k.id),
       organizer: { label: k.label },
@@ -157,7 +174,8 @@ function createOrganizerRouter({ db, dataDir, adminSecret }) {
       ).all(e.id);
       const usersCsv = ['uuid;vorname;nachname;registriert-am;fotoanzahl'];
       for (const u of userRows) {
-        usersCsv.push(`${u.uuid};${u.first_name};${u.last_name};${u.created_at};${u.photo_count}`);
+        usersCsv.push([u.uuid, u.first_name, u.last_name, u.created_at, u.photo_count]
+          .map(util.csvCell).join(';'));
       }
 
       const zip = archiver('zip', { zlib: { level: 9 } });
@@ -179,7 +197,8 @@ function createOrganizerRouter({ db, dataDir, adminSecret }) {
             `${String(++index).padStart(4, '0')}-${r.last_name}-${r.first_name}-${stamp}-${variant}`
           ) + path.extname(filename);
           zip.file(path.join(photosRoot, e.session_id, r.uuid, filename), { name: entryName });
-          manifest.push(`${entryName};${r.id};${r.uuid};${r.first_name};${r.last_name};${r.created_at};${variant};${r.filter_id || '-'}`);
+          manifest.push([entryName, r.id, r.uuid, r.first_name, r.last_name, r.created_at, variant, r.filter_id || '-']
+            .map(util.csvCell).join(';'));
         }
       }
       zip.append('\uFEFF' + manifest.join('\r\n') + '\r\n', { name: 'manifest.csv' });

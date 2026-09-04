@@ -318,6 +318,15 @@ async function main() {
   const removeForeignRes = await fetch(BASE + `/api/e/${ev2.sessionId}/photos/${oldUpData.photo.id}/refilter`, { method: 'POST', body: removeForeign });
   check('Fremder entfernt Filter-Variante → 403 (nur Besitzer)', removeForeignRes.status === 403);
 
+  // Integrität: ein Fremder darf eine BESTEHENDE Filter-Variante (die nach der
+  // Erzeugung oben vorhanden ist) nicht überschreiben.
+  const replaceForeign = new FormData();
+  replaceForeign.set('uuid', userD);
+  replaceForeign.set('filterId', 'disposable');
+  replaceForeign.set('filtered', new Blob([JPEG], { type: 'image/jpeg' }), 'filtered.jpg');
+  const replaceForeignRes = await fetch(BASE + `/api/e/${ev2.sessionId}/photos/${oldUpData.photo.id}/refilter`, { method: 'POST', body: replaceForeign });
+  check('Fremder ERSETZT bestehende Filter-Variante → 403 (nur Besitzer)', replaceForeignRes.status === 403);
+
   console.log('\n— Admin-Export —');
   const exportRes = await fetch(BASE + `/api/admin/events/${event.id}/export.zip`, { headers: auth });
   const exportBuf = Buffer.from(await exportRes.arrayBuffer());
@@ -401,6 +410,29 @@ async function main() {
   check('Gesperrter Schlüssel → Login 401', orgLoginRevoked.status === 401);
   const orgEventsRevoked = await fetch(BASE + '/api/organizer/events', { headers: orgAuth });
   check('Gesperrter Schlüssel → bestehender Token abgelehnt', orgEventsRevoked.status === 401);
+
+  console.log('\n— Rate-Limit (Login-Brute-Force-Schutz) —');
+  // Am Ende, damit der ausgelöste 30s-Block die übrigen (bereits erledigten)
+  // Admin-/Veranstalter-Requests nicht beeinflusst.
+  let adminBlocked = false;
+  for (let i = 0; i < 6; i++) {
+    const r = await fetch(BASE + '/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'falsch' }),
+    });
+    if (r.status === 429) adminBlocked = true;
+  }
+  check('Admin-Login: 6x Fehlversuch → 429 (Rate-Limit)', adminBlocked);
+
+  let orgBlocked = false;
+  for (let i = 0; i < 6; i++) {
+    const r = await fetch(BASE + '/api/organizer/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'TTS-1111-1111' }),
+    });
+    if (r.status === 429) orgBlocked = true;
+  }
+  check('Veranstalter-Login: 6x Fehlversuch → 429 (Rate-Limit)', orgBlocked);
 
   console.log(`\nErgebnis: ${passed} bestanden, ${failed} fehlgeschlagen`);
   if (failed > 0) process.exitCode = 1;

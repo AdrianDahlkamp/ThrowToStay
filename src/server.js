@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * ThrowToStay – Event-Fotobox-Server.
+ * ThrowToStay – Server für Event-Fotos.
  *
  * Start:        npm start            (HTTP, Standard-Port 3742)
  * HTTPS-Start:  npm run start:https  (Selbstsigniertes Zertifikat wird automatisch

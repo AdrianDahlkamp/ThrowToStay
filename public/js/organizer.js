@@ -541,7 +541,7 @@
     h.textContent = 'Wie heißt dein Event?';
     const p = document.createElement('p');
     p.className = 'wizard-step-text';
-    p.textContent = 'Dieser Name erscheint in der Fotobox und in der Galerie. Das Datum wird automatisch auf heute gesetzt.';
+    p.textContent = 'Dieser Name erscheint in der App und in der Galerie. Das Datum wird automatisch auf heute gesetzt.';
     const field = document.createElement('div');
     field.className = 'field';
     field.innerHTML = '<label for="wizName">Event-Name</label>';

@@ -18,9 +18,10 @@
   const els = {
     loginBox: $('loginBox'), loginForm: $('loginForm'), pwInput: $('pwInput'),
     loginError: $('loginError'), dashboard: $('dashboard'), logoutBtn: $('logoutBtn'),
-    createForm: $('createForm'), createName: $('createName'),
-    eventList: $('eventList'), toast: $('toast'),
+    newEventBtn: $('newEventBtn'), eventList: $('eventList'), toast: $('toast'),
     keyForm: $('keyForm'), keyLabel: $('keyLabel'), keyList: $('keyList'),
+    wizard: $('wizard'), wizardProgress: $('wizardProgress'), wizardBody: $('wizardBody'),
+    wizardBack: $('wizardBack'), wizardNext: $('wizardNext'), wizardClose: $('wizardClose'),
   };
 
   const TOKEN_KEY = 'tts_admin_token';
@@ -515,22 +516,242 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  // ------------------------------------------------------------- Event erstellen
+  // ------------------------------------------------------------- Event-Wizard (wie im Veranstalter-Bereich)
 
-  els.createForm.addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const name = els.createName.value.trim();
-    if (!name) return;
+  const WIZ_STEPS = 4;
+  const wiz = {
+    step: 0,
+    name: '',
+    maxPhotos: 30,
+    maxSide: 2560, // Default: Preset „Mid“
+    jpegQuality: 92,
+    unlockAt: '', // ISO
+    creating: false,
+  };
+
+  function defaultUnlockLocal() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(8, 0, 0, 0);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T08:00`;
+  }
+
+  // Qualitätspresets für den Wizard (Low / Mid / High).
+  const QUALITY_PRESETS = [
+    { id: 'low', label: 'Low', maxSide: 1600, jpegQuality: 85, desc: 'Kleinere Dateien, reicht für die Galerie' },
+    { id: 'mid', label: 'Mid', maxSide: 2560, jpegQuality: 92, desc: 'Gute Qualität – empfohlen' },
+    { id: 'high', label: 'High', maxSide: 4096, jpegQuality: 100, desc: 'Maximale Qualität, größte Dateien' },
+  ];
+
+  function qualityPresetId() {
+    const q = QUALITY_PRESETS.find(x => x.maxSide === wiz.maxSide && x.jpegQuality === wiz.jpegQuality);
+    return q ? q.id : 'mid';
+  }
+
+  function openWizard() {
+    wiz.step = 0;
+    wiz.name = '';
+    wiz.maxPhotos = 30;
+    wiz.maxSide = 2560; // Default: Preset „Mid“
+    wiz.jpegQuality = 92;
+    wiz.unlockAt = new Date(defaultUnlockLocal()).toISOString();
+    els.wizard.style.display = 'flex';
+    renderWizard();
+  }
+
+  function closeWizard() {
+    els.wizard.style.display = 'none';
+  }
+
+  function renderWizard() {
+    // Fortschrittspunkte
+    els.wizardProgress.innerHTML = '';
+    for (let i = 0; i < WIZ_STEPS; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (i <= wiz.step ? ' active' : '');
+      els.wizardProgress.appendChild(dot);
+    }
+
+    const body = els.wizardBody;
+    body.innerHTML = '';
+    if (wiz.step === 0) renderWizName(body);
+    else if (wiz.step === 1) renderWizLimit(body);
+    else if (wiz.step === 2) renderWizImage(body);
+    else renderWizUnlock(body);
+
+    els.wizardBack.style.visibility = wiz.step === 0 ? 'hidden' : 'visible';
+    els.wizardNext.textContent = wiz.step === WIZ_STEPS - 1 ? 'Event erstellen' : 'Weiter';
+  }
+
+  function renderWizName(body) {
+    const h = document.createElement('div');
+    h.className = 'wizard-step-title';
+    h.textContent = 'Wie heißt das Event?';
+    const p = document.createElement('p');
+    p.className = 'wizard-step-text';
+    p.textContent = 'Dieser Name erscheint in der App und in der Galerie. Das Datum wird automatisch auf heute gesetzt.';
+    const field = document.createElement('div');
+    field.className = 'field';
+    field.innerHTML = '<label for="wizName">Event-Name</label>';
+    const input = document.createElement('input');
+    input.id = 'wizName';
+    input.type = 'text';
+    input.maxLength = 80;
+    input.placeholder = 'z. B. Sommerfest 2026';
+    input.value = wiz.name;
+    field.appendChild(input);
+    body.append(h, p, field);
+    setTimeout(() => input.focus(), 30);
+  }
+
+  function renderWizLimit(body) {
+    const h = document.createElement('div');
+    h.className = 'wizard-step-title';
+    h.textContent = 'Wie viele Fotos darf ein Gast machen?';
+    const p = document.createElement('p');
+    p.className = 'wizard-step-text';
+    p.textContent = 'Maximale Anzahl an Fotos, die ein einzelner Gast bei diesem Event speichern kann. Bei Überschreitung kann dieser Gast keine weiteren Fotos aufnehmen.';
+    const quick = document.createElement('div');
+    quick.className = 'wizard-quick';
+    const qBtn = document.createElement('button');
+    qBtn.className = 'btn small secondary';
+    qBtn.type = 'button';
+    qBtn.textContent = 'Standard: 30';
+    qBtn.addEventListener('click', () => { wiz.maxPhotos = 30; renderWizard(); });
+    quick.appendChild(qBtn);
+    const field = document.createElement('div');
+    field.className = 'field';
+    field.innerHTML = '<label for="wizLimit">Max. Fotos pro Gast</label>';
+    const input = document.createElement('input');
+    input.id = 'wizLimit';
+    input.type = 'number';
+    input.min = '1';
+    input.max = '1000';
+    input.value = wiz.maxPhotos;
+    field.appendChild(input);
+    body.append(h, p, quick, field);
+  }
+
+  function renderWizImage(body) {
+    const h = document.createElement('div');
+    h.className = 'wizard-step-title';
+    h.textContent = 'Wie hoch soll die Fotoqualität sein?';
+    const p = document.createElement('p');
+    p.className = 'wizard-step-text';
+    p.textContent = 'Größere Bilder und höhere JPEG-Qualität liefern mehr Detail, erzeugen aber deutlich größere Dateien. Feinjustieren kannst du später in den Expert-Einstellungen des Events.';
+    body.append(h, p);
+    const wrap = document.createElement('div');
+    wrap.className = 'quality-options';
+    const selId = qualityPresetId();
+    for (const q of QUALITY_PRESETS) {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.className = 'quality-option' + (q.id === selId ? ' selected' : '');
+      const radio = document.createElement('span');
+      radio.className = 'qo-radio';
+      const label = document.createElement('span');
+      label.className = 'qo-label';
+      label.innerHTML = `<b>${q.label}</b> · ${q.maxSide} px · ${q.jpegQuality} %`;
+      const desc = document.createElement('span');
+      desc.className = 'qo-desc';
+      desc.textContent = q.desc;
+      opt.append(radio, label, desc);
+      opt.addEventListener('click', () => {
+        wiz.maxSide = q.maxSide;
+        wiz.jpegQuality = q.jpegQuality;
+        for (const b of wrap.querySelectorAll('.quality-option')) b.classList.toggle('selected', b === opt);
+      });
+      wrap.appendChild(opt);
+    }
+    body.append(wrap);
+  }
+
+  function renderWizUnlock(body) {
+    const h = document.createElement('div');
+    h.className = 'wizard-step-title';
+    h.textContent = 'Wann öffnet die gemeinsame Galerie?';
+    const p = document.createElement('p');
+    p.className = 'wizard-step-text';
+    p.textContent = 'Ab diesem Zeitpunkt sehen alle Gäste die Fotos aller Gäste. Standard ist der Folgetag um 08:00 Uhr.';
+    const quick = document.createElement('div');
+    quick.className = 'wizard-quick';
+    const qBtn = document.createElement('button');
+    qBtn.className = 'btn small secondary';
+    qBtn.type = 'button';
+    qBtn.textContent = 'Standard: Folgetag 08:00 Uhr';
+    qBtn.addEventListener('click', () => {
+      wiz.unlockAt = new Date(defaultUnlockLocal()).toISOString();
+      renderWizard();
+    });
+    quick.appendChild(qBtn);
+    const field = document.createElement('div');
+    field.className = 'field';
+    field.innerHTML = '<label for="wizUnlock">Galerie-Freigabe</label>';
+    const input = document.createElement('input');
+    input.id = 'wizUnlock';
+    input.type = 'datetime-local';
+    input.value = toLocalInputValue(wiz.unlockAt);
+    field.appendChild(input);
+    body.append(h, p, quick, field);
+  }
+
+  // Schritt validieren + Werte übernehmen. Gibt true, wenn weitergegangen werden darf.
+  function readWizardStep() {
+    if (wiz.step === 0) {
+      const v = els.wizardBody.querySelector('#wizName').value.trim();
+      if (!v) { toast('Bitte einen Event-Namen angeben.', true); return false; }
+      wiz.name = v;
+    } else if (wiz.step === 1) {
+      const v = parseInt(els.wizardBody.querySelector('#wizLimit').value, 10);
+      if (!Number.isFinite(v) || v < 1) { toast('Bitte ein gültiges Foto-Limit angeben.', true); return false; }
+      wiz.maxPhotos = Math.min(v, 1000);
+    } else if (wiz.step === 2) {
+      // Werte stammen aus dem gewählten Qualitätspreset (wiz.maxSide / wiz.jpegQuality)
+    } else if (wiz.step === 3) {
+      const v = els.wizardBody.querySelector('#wizUnlock').value;
+      const t = v ? Date.parse(v) : NaN;
+      if (Number.isNaN(t)) { toast('Bitte einen gültigen Freigabe-Zeitpunkt angeben.', true); return false; }
+      wiz.unlockAt = new Date(t).toISOString();
+    }
+    return true;
+  }
+
+  els.newEventBtn.addEventListener('click', () => openWizard());
+  els.wizardClose.addEventListener('click', closeWizard);
+  els.wizardBack.addEventListener('click', () => {
+    if (wiz.step > 0) { wiz.step -= 1; renderWizard(); }
+  });
+  els.wizardNext.addEventListener('click', async () => {
+    if (!readWizardStep()) return;
+    if (wiz.step < WIZ_STEPS - 1) {
+      wiz.step += 1;
+      renderWizard();
+      return;
+    }
+    if (wiz.creating) return;
+    wiz.creating = true;
+    els.wizardNext.disabled = true;
     try {
       const data = await api('/events', {
         method: 'POST',
-        body: { name, eventDate: todayStr() },
+        body: {
+          name: wiz.name,
+          eventDate: todayStr(),
+          maxPhotosPerUser: wiz.maxPhotos,
+          maxImageSide: wiz.maxSide,
+          jpegQuality: wiz.jpegQuality,
+          galleryUnlockAt: wiz.unlockAt,
+        },
       });
-      els.createName.value = '';
+      closeWizard();
       toast(`Event "${data.event.name}" erstellt – Session-ID: ${data.event.sessionId}`);
       loadEvents();
     } catch (err) {
       toast(err.message, true);
+    } finally {
+      wiz.creating = false;
+      els.wizardNext.disabled = false;
     }
   });
 

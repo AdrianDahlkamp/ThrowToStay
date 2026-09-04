@@ -712,6 +712,13 @@ body.event-page {
 .onboard-card h2 { margin: 4px 0 6px; font-size: 20px; }
 .onboard-card p { color: var(--text-dim); font-size: 14px; margin: 0 0 18px; }
 .onboard-card .error { color: var(--danger); font-size: 13.5px; min-height: 18px; margin: 6px 0 0; }
+/* Onboarding als 2-Schritte-Wizard (ein Feld pro Schritt → Tastatur schiebt nichts weg) */
+.onboard-card .onboard-btn { width: 100%; }
+.onboard-card .onboard-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+.onboard-card .onboard-nav { display: flex; gap: 10px; }
+.onboard-card .onboard-nav .onboard-btn { flex: 1 1 0; }
+.onboard-card .onboard-step { animation: onboard-in 0.18s ease; }
+@keyframes onboard-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ---------------------------------------------------------------- Admin */
 

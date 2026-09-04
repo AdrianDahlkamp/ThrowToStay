@@ -121,15 +121,34 @@
       <h2 id="onboardEventName">Event</h2>
       <p>Willkommen! Damit deine Fotos zugeordnet werden können, gib bitte deinen Namen ein. Deine Geräte-Kennung wird automatisch im Browser gespeichert.</p>
       <form id="onboardForm">
-        <div class="field">
-          <label for="firstNameInput">Vorname</label>
-          <input id="firstNameInput" type="text" required maxlength="60" placeholder="Vorname" autocomplete="given-name">
+        <!-- Schritt 1: Vorname -->
+        <div class="onboard-step" data-step="1">
+          <div class="field">
+            <label for="firstNameInput">Vorname</label>
+            <input id="firstNameInput" type="text" required maxlength="60" placeholder="Vorname" autocomplete="given-name">
+          </div>
+          <button class="btn onboard-btn" type="button" id="onboardNextBtn">
+            Weiter
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
         </div>
-        <div class="field">
-          <label for="lastNameInput">Nachname</label>
-          <input id="lastNameInput" type="text" required maxlength="60" placeholder="Nachname" autocomplete="family-name">
+        <!-- Schritt 2: Nachname -->
+        <div class="onboard-step" data-step="2" style="display:none">
+          <div class="field">
+            <label for="lastNameInput">Nachname</label>
+            <input id="lastNameInput" type="text" required maxlength="60" placeholder="Nachname" autocomplete="family-name">
+          </div>
+          <div class="onboard-nav">
+            <button class="btn onboard-btn secondary" type="button" id="onboardBackBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+              Zurück
+            </button>
+            <button class="btn onboard-btn" type="submit" id="joinBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+              <span id="joinBtnLabel">Beitreten</span>
+            </button>
+          </div>
         </div>
-        <button class="btn" type="submit" id="joinBtn" style="width:100%">Beitreten</button>
       </form>
       <div class="error" id="onboardError"></div>
     </div>

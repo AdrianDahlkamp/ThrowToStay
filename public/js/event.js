@@ -41,7 +41,10 @@
     lightbox: $('lightbox'), lbImg: $('lbImg'), lbName: $('lbName'), lbClose: $('lbClose'),
     lbVariantBtns: $('lbVariantBtns'), lbFilterChips: $('lbFilterChips'),
     onboard: $('onboard'), onboardEventName: $('onboardEventName'), onboardForm: $('onboardForm'),
-    firstNameInput: $('firstNameInput'), lastNameInput: $('lastNameInput'), joinBtn: $('joinBtn'), onboardError: $('onboardError'),
+    onboardSteps: document.querySelectorAll('#onboardForm .onboard-step'),
+    firstNameInput: $('firstNameInput'), lastNameInput: $('lastNameInput'),
+    onboardNextBtn: $('onboardNextBtn'), onboardBackBtn: $('onboardBackBtn'),
+    joinBtn: $('joinBtn'), joinBtnLabel: $('joinBtnLabel'), onboardError: $('onboardError'),
     toast: $('toast'),
   };
 
@@ -960,16 +963,38 @@ state.track = null;
     return data;
   }
 
-  function showOnboard(prefill = false) {
+  let onboardStep = 1;
+
+  // Overlay exakt auf die sichtbare Fläche (visualViewport) legen, damit das
+  // aktive Eingabefeld auch bei geöffneter Tastatur sichtbar bleibt.
+  function positionOnboard() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    els.onboard.style.top = vv.offsetTop + 'px';
+    els.onboard.style.left = vv.offsetLeft + 'px';
+    els.onboard.style.right = 'auto';
+    els.onboard.style.bottom = 'auto';
+    els.onboard.style.width = vv.width + 'px';
+    els.onboard.style.height = vv.height + 'px';
+  }
+
+  function showOnboardStep(n, doFocus = true) {
+    onboardStep = n;
+    els.onboardSteps.forEach(s => { s.style.display = (Number(s.dataset.step) === n) ? '' : 'none'; });
+    if (doFocus) (n === 1 ? els.firstNameInput : els.lastNameInput).focus();
+  }
+
+  function showOnboard(prefill = false, doFocus = true) {
     els.onboardEventName.textContent = state.event ? state.event.name : 'Event';
+    els.onboardError.textContent = '';
     if (prefill && state.user) {
       els.firstNameInput.value = state.user.firstName;
       els.lastNameInput.value = state.user.lastName;
-      els.joinBtn.textContent = 'Speichern';
     }
-    els.onboardError.textContent = '';
+    els.joinBtnLabel.textContent = prefill ? 'Speichern' : 'Beitreten';
     els.onboard.style.display = 'flex';
-    els.firstNameInput.focus();
+    positionOnboard();
+    showOnboardStep(prefill ? 2 : 1, doFocus);
   }
 
   function hideOnboard() {
@@ -1014,8 +1039,7 @@ state.track = null;
     renderFilterChips(els.filterRow, state.filter, setFilter);
 
     if (!state.user) {
-      els.onboard.style.display = 'flex';
-      els.onboardEventName.textContent = state.event.name;
+      showOnboard(false, false);
     }
 
     startCamera();
@@ -1064,17 +1088,32 @@ state.track = null;
     if (els.shareOverlay.classList.contains('visible')) closeShare();
     else closeLightbox();
   });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', positionOnboard);
+
+  els.onboardNextBtn.addEventListener('click', () => {
+    if (!els.firstNameInput.value.trim()) {
+      els.onboardError.textContent = 'Bitte gib deinen Vornamen ein.';
+      els.firstNameInput.focus();
+      return;
+    }
+    els.onboardError.textContent = '';
+    showOnboardStep(2);
+  });
+  els.onboardBackBtn.addEventListener('click', () => showOnboardStep(1));
 
   els.onboardForm.addEventListener('submit', async ev => {
     ev.preventDefault();
     const first = els.firstNameInput.value.trim();
     const last = els.lastNameInput.value.trim();
-    if (!first || !last) { els.onboardError.textContent = 'Bitte Vor- und Nachnamen angeben.'; return; }
+    if (!first || !last) {
+      els.onboardError.textContent = 'Bitte Vor- und Nachnamen angeben.';
+      showOnboardStep(first ? 2 : 1);
+      return;
+    }
     els.joinBtn.disabled = true;
     try {
       await registerUser(first, last);
       hideOnboard();
-      els.joinBtn.textContent = 'Beitreten';
       await afterJoin();
       toast(`Willkommen, ${first}!`);
     } catch (err) {

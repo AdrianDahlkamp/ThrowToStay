@@ -128,7 +128,9 @@ async function main() {
 
   console.log('\n— Event-App: State & Registrierung —');
   const eventPage = await fetch(BASE + `/e/${event.sessionId}`);
-  check('Event-URL liefert Kamera-App', eventPage.ok && (await eventPage.text()).includes('shutterBtn'));
+  const eventHtml = await eventPage.text();
+  check('Event-URL liefert Kamera-App', eventPage.ok && eventHtml.includes('shutterBtn'));
+  check('Onboarding-Wizard vorhanden (Vorname→Nachname)', eventHtml.includes('onboardNextBtn') && eventHtml.includes('onboardBackBtn') && eventHtml.includes('data-step="2"') && eventHtml.includes('joinBtnLabel'));
   const csp = String(eventPage.headers.get('content-security-policy') || '');
   check('CSP ohne Google-Fonts (self-hosted)', !csp.includes('googleapis') && !csp.includes('gstatic'));
 

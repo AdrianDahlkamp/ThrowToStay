@@ -1,6 +1,6 @@
 # ThrowToStay 📸
 
-Event-Fotobox als Webanwendung: Gäste scannen einen QR-Code, landen direkt in einer
+Event-App als Webanwendung: Gäste scannen einen QR-Code, landen direkt in einer
 Kamera-App im Browser, machen Fotos – und am Folgetag ab **08:00 Uhr** öffnet die
 gemeinsame Galerie aller Gäste.
 

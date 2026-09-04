@@ -21,6 +21,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 const archiver = require('archiver');
 const multer = require('multer');
+const QRCode = require('qrcode');
 const util = require('../util');
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB pro Bilddatei
@@ -119,6 +120,31 @@ function createPublicRouter({ db, dataDir }) {
     if (!event) return res.status(404).json({ error: 'Event nicht gefunden. Bitte QR-Code erneut scannen.' });
     const user = getUserByUuid(event.id, req.query.uuid);
     res.json(eventStatePayload(event, user));
+  });
+
+  // QR-Code zum Teilen: zeigt den Event-Link groß auf dem Bildschirm des Gasts,
+  // damit er ihn anderen Gästen zeigen kann (jeder Scanner wird ein eigener Gast).
+  // Der Client übergibt die korrekte (https-)Origin über ?u=; wir prüfen, dass es
+  // die Event-URL mit dem gleichen Host ist. Fallback: https + Request-Host.
+  router.get('/:sessionId/qr.png', async (req, res, next) => {
+    try {
+      const event = getEventBySession(req.params.sessionId);
+      if (!event) return res.status(404).json({ error: 'Event nicht gefunden.' });
+
+      let url = null;
+      try {
+        const u = new URL(String(req.query.u || ''));
+        if (u.host === req.get('host') && u.pathname === `/e/${event.session_id}`) url = u.toString();
+      } catch { /* ungültiger u-Parameter → Fallback */ }
+      if (!url) url = `https://${req.get('host')}/e/${event.session_id}`;
+
+      const buf = await QRCode.toBuffer(url, { width: 800, margin: 2, errorCorrectionLevel: 'M' });
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(buf);
+    } catch (err) {
+      next(err);
+    }
   });
 
   // Erstbesuch: UUID + Vor-/Nachname registrieren (Upsert, Name ist änderbar).

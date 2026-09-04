@@ -25,6 +25,8 @@
   const els = {
     eventName: $('eventName'), userLine: $('userLine'),
     tabCamera: $('tabCamera'), tabGallery: $('tabGallery'),
+    shareBtn: $('shareBtn'), shareOverlay: $('shareOverlay'),
+    shareImg: $('shareImg'), shareClose: $('shareClose'), shareUrlText: $('shareUrlText'), shareCopyBtn: $('shareCopyBtn'),
     cameraView: $('cameraView'), galleryView: $('galleryView'),
     cameraStage: $('cameraStage'), video: $('video'),
     fxTint: $('fxTint'), fxGrain: $('fxGrain'), fxVignette: $('fxVignette'),
@@ -899,6 +901,29 @@ state.track = null;
     state.lbPhotoId = null;
   }
 
+  // ------------------------------------------------------------- QR-Teilen
+
+  function shareUrl() {
+    return `${location.origin}/e/${SID}`;
+  }
+
+  function openShare() {
+    els.shareUrlText.textContent = shareUrl();
+    els.shareImg.onerror = () => {
+      els.shareUrlText.textContent = 'QR-Code konnte nicht geladen werden.';
+    };
+    // ?u= übergibt die korrekte (https-)Origin: der Server erkennt hinter dem
+    // Reverse-Proxy sonst nur http und würde einen falschen Link encodieren.
+    els.shareImg.removeAttribute('src');
+    els.shareImg.src = `/api/e/${SID}/qr.png?u=${encodeURIComponent(shareUrl())}`;
+    els.shareOverlay.classList.add('visible');
+  }
+
+  function closeShare() {
+    els.shareOverlay.classList.remove('visible');
+    els.shareImg.removeAttribute('src');
+  }
+
   // ------------------------------------------------------------- Tabs & Onboarding
 
   function switchMode(mode) {
@@ -1001,6 +1026,17 @@ state.track = null;
   els.tabCamera.addEventListener('click', () => switchMode('camera'));
   els.tabGallery.addEventListener('click', () => switchMode('gallery'));
   els.toGalleryBtn.addEventListener('click', () => switchMode('gallery'));
+  els.shareBtn.addEventListener('click', openShare);
+  els.shareClose.addEventListener('click', closeShare);
+  els.shareOverlay.addEventListener('click', ev => { if (ev.target === els.shareOverlay) closeShare(); });
+  els.shareCopyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl());
+      toast('Link kopiert.');
+    } catch {
+      toast('Kopieren nicht möglich – Link steht unten.', true);
+    }
+  });
   els.shutterBtn.addEventListener('click', capture);
   els.camRetryBtn.addEventListener('click', startCamera);
   els.retryBtn.addEventListener('click', retryFailed);
@@ -1023,7 +1059,11 @@ state.track = null;
   els.downloadSelBtn.addEventListener('click', downloadSelected);
   els.lbClose.addEventListener('click', closeLightbox);
   els.lightbox.addEventListener('click', ev => { if (ev.target === els.lightbox) closeLightbox(); });
-  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeLightbox(); });
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape') return;
+    if (els.shareOverlay.classList.contains('visible')) closeShare();
+    else closeLightbox();
+  });
 
   els.onboardForm.addEventListener('submit', async ev => {
     ev.preventDefault();

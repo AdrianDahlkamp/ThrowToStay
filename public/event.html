@@ -20,6 +20,9 @@
       <nav class="tabs">
         <button class="tab-btn active" id="tabCamera" type="button">Kamera</button>
         <button class="tab-btn" id="tabGallery" type="button">Galerie</button>
+        <button class="share-btn" id="shareBtn" type="button" title="QR-Code teilen" aria-label="QR-Code teilen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14h1M14 20h1M20 20h1v-3"/></svg>
+        </button>
       </nav>
     </header>
 
@@ -96,6 +99,20 @@
     <div class="lb-bar">
       <div class="refilter-row" id="lbVariantBtns"></div>
       <div class="refilter-row" id="lbFilterChips"></div>
+    </div>
+  </div>
+
+  <!-- QR-Teilen -->
+  <div class="share-overlay" id="shareOverlay">
+    <div class="share-card">
+      <button class="rbtn share-close" id="shareClose" type="button" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <h2>Beitreten</h2>
+      <p class="share-hint">Zeig diesen Code – andere Gäste scannen ihn mit ihrer Kamera und landen direkt bei diesem Event.</p>
+      <img class="share-qr" id="shareImg" alt="QR-Code für dieses Event">
+      <div class="share-url" id="shareUrlText"></div>
+      <button class="btn" id="shareCopyBtn" type="button">Link kopieren</button>
     </div>
   </div>
 

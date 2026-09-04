@@ -134,6 +134,17 @@ async function main() {
   const stateAnonData = await stateAnon.json();
   check('State ohne UUID: Event sichtbar, kein User', stateAnonData.event.name === 'Testevent' && stateAnonData.user === null);
 
+  // QR-Teilen-Endpunkt (public): PNG mit Client-URL, Fallback ohne u, 404-Case.
+  const shareQrUrl = `http://127.0.0.1:${PORT}/e/${event.sessionId}`;
+  const shareQr = await fetch(BASE + `/api/e/${event.sessionId}/qr.png?u=${encodeURIComponent(shareQrUrl)}`);
+  const shareQrBuf = Buffer.from(await shareQr.arrayBuffer());
+  check('Public QR (Teilen) liefert PNG', shareQr.ok && shareQrBuf.length > 100 && shareQrBuf[0] === 0x89 && shareQrBuf[1] === 0x50);
+  const shareQrNoU = await fetch(BASE + `/api/e/${event.sessionId}/qr.png`);
+  const shareQrNoUBuf = Buffer.from(await shareQrNoU.arrayBuffer());
+  check('Public QR ohne u-Parameter (Fallback) liefert PNG', shareQrNoU.ok && shareQrNoUBuf.length > 100 && shareQrNoUBuf[0] === 0x89);
+  const shareQr404 = await fetch(BASE + `/api/e/NEINEXISTENT/qr.png`);
+  check('Public QR unbekanntes Event → 404', shareQr404.status === 404);
+
   const userA = uuid();
   const reg = await fetch(BASE + `/api/e/${event.sessionId}/register`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

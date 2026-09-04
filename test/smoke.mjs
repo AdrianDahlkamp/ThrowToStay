@@ -129,6 +129,18 @@ async function main() {
   console.log('\n— Event-App: State & Registrierung —');
   const eventPage = await fetch(BASE + `/e/${event.sessionId}`);
   check('Event-URL liefert Kamera-App', eventPage.ok && (await eventPage.text()).includes('shutterBtn'));
+  const csp = String(eventPage.headers.get('content-security-policy') || '');
+  check('CSP ohne Google-Fonts (self-hosted)', !csp.includes('googleapis') && !csp.includes('gstatic'));
+
+  // Selbst-gehostete Fonts (ersetzen Google Fonts): CSS + woff2-Dateien erreichbar.
+  const fontsCss = await fetch(BASE + '/fonts/fonts.css');
+  check('Lokale fonts.css ausgeliefert (self-gehostet)', fontsCss.ok && (await fontsCss.text()).includes('@font-face'));
+  const interFont = await fetch(BASE + '/fonts/Inter.woff2');
+  const interBuf = Buffer.from(await interFont.arrayBuffer());
+  check('Inter.woff2 gültig (WOFF2-Magic)', interFont.ok && interBuf.length > 1000 && interBuf.toString('ascii', 0, 4) === 'wOF2');
+  const greatFont = await fetch(BASE + '/fonts/Great-Vibes-400.woff2');
+  const greatBuf = Buffer.from(await greatFont.arrayBuffer());
+  check('Great Vibes woff2 gültig (WOFF2-Magic)', greatFont.ok && greatBuf.length > 1000 && greatBuf.toString('ascii', 0, 4) === 'wOF2');
 
   const stateAnon = await fetch(BASE + `/api/e/${event.sessionId}/state`);
   const stateAnonData = await stateAnon.json();

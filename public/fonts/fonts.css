@@ -1,0 +1,17 @@
+/* Lokale Fonts (self-gehostet, latin-Subset): Inter (Variable Font) + Great Vibes.
+   Ersetzt die Google-Fonts-Links – keine externen Abhängigkeiten mehr. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/Inter.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Great-Vibes-400.woff2') format('woff2');
+}

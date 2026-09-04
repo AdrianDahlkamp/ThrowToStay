@@ -58,13 +58,13 @@ app.disable('x-powered-by');
 // ------------------------------------------------------------ Security-Header
 // Clickjacking (X-Frame-Options + CSP frame-ancestors), MIME-Sniffing, Referrer,
 // Kamera nur im eigenen Kontext. CSP ist auf die App abgestimmt: keine
-// Inline-Scripts (nur externe /js/*.js), extern nur Google Fonts, blob:/data:
-// für Kamera-Canvas.
+// Inline-Scripts (nur externe /js/*.js), Fonts lokal self-gehostet (/fonts/),
+// blob:/data: für Kamera-Canvas.
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data: blob:",
   "connect-src 'self'",
   "frame-ancestors 'none'",

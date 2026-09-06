@@ -78,6 +78,9 @@ function ensureColumns(db) {
   if (!cols.includes('jpeg_quality')) {
     db.exec('ALTER TABLE events ADD COLUMN jpeg_quality INTEGER NOT NULL DEFAULT 92');
   }
+  if (!cols.includes('hide_filter_buttons')) {
+    db.exec('ALTER TABLE events ADD COLUMN hide_filter_buttons INTEGER NOT NULL DEFAULT 0');
+  }
 }
 
 function openDb(dataDir) {

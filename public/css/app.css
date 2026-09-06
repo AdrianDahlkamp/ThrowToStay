@@ -110,6 +110,27 @@ h1, h2, h3 { font-weight: 700; }
   font-weight: 600;
   color: var(--text-dim);
 }
+/* Checkbox-Zeile (z. B. „Reiner Wegwerfkamera-Modus“) */
+.field label.check-line, label.check-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  padding: 11px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.field label.check-line input[type="checkbox"], label.check-line input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent, #e0a458);
+  cursor: pointer;
+  flex-shrink: 0;
+}
 input[type="text"], input[type="password"], input[type="date"], input[type="number"], input[type="datetime-local"], select {
   background: var(--bg-soft);
   border: 1px solid var(--line);

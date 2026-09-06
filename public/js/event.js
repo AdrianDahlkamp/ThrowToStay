@@ -54,7 +54,7 @@
     event: null,
     user: null,
     photos: [],
-    filter: 'none',
+    filter: 'disposable',   // Standard: MIT Filter (Einweg-Kamera-Look)
     facing: 'environment',
     stream: null,
     track: null,
@@ -892,12 +892,14 @@ state.track = null;
     // Filter-Variante erzeugen: bei eigenen Fotos immer möglich, bei fremden
     // Fotos nach Galerie-Freigabe (die Bilder sind dann für alle sichtbar).
     const canGenerateFilt = p.mine || !!(state.event && state.event.galleryUnlocked);
+    // Reihenfolge: erst „Mit Filter“ (der Einweg-Kamera-Look, der Standard),
+    // dann „Ohne Filter“ (das Original).
     els.lbVariantBtns.append(
-      mk('original', ICONS.plain, 'Ohne Filter anzeigen', false),
       mk('filtered', ICONS.sparkle,
         p.hasFiltered ? 'Mit Filter anzeigen' : (canGenerateFilt ? 'Filter anwenden – erzeugt die Variante' : 'Keine Filter-Variante vorhanden'),
         !p.hasFiltered && !canGenerateFilt,
-        !p.hasFiltered && canGenerateFilt ? () => refilterPhoto(p, 'disposable') : null)
+        !p.hasFiltered && canGenerateFilt ? () => refilterPhoto(p, 'disposable') : null),
+      mk('original', ICONS.plain, 'Ohne Filter anzeigen', false)
     );
     const dlB = document.createElement('button');
     dlB.type = 'button';
@@ -1108,7 +1110,13 @@ state.track = null;
     if (!state.event) return;
 
     renderHeader();
-    setFilter('none');
+    // Standard: MIT Filter (Einweg-Kamera-Look). Im reinen Wegwerfkamera-Modus
+    // (Organizer hat die Filter-Buttons ausgeblendet) bleiben die Wechsler weg –
+    // der Filter ist fix an, das Original (ohne Filter) wird trotzdem immer
+    // in der Galerie zum Download angeboten.
+    const pureMode = !!(state.event && state.event.hideFilterButtons);
+    if (pureMode) els.filterRow.style.display = 'none';
+    setFilter('disposable');
     els.fxGrain.style.backgroundImage = `url(${window.TTSFilters.grainTile()})`;
     renderFilterChips(els.filterRow, state.filter, setFilter);
 

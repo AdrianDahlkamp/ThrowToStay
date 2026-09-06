@@ -31,6 +31,7 @@ function eventToJson(e) {
     maxPhotosPerUser: e.max_photos_per_user,
     maxImageSide: e.max_image_side,
     jpegQuality: e.jpeg_quality,
+    hideFilterButtons: !!e.hide_filter_buttons,
     galleryUnlockAt: e.gallery_unlock_at,
     galleryUnlocked: Date.now() >= Date.parse(e.gallery_unlock_at),
     createdAt: e.created_at,
@@ -98,12 +99,13 @@ function createEvent(db, body, createdBy = null) {
   }
 
   const { maxImageSide, jpegQuality } = parseImageSettings(body);
+  const hideFilterButtons = (body && body.hideFilterButtons) ? 1 : 0;
 
   const id = util.generateId();
   db.prepare(
-    `INSERT INTO events (id, session_id, name, event_date, max_photos_per_user, gallery_unlock_at, created_at, created_by, max_image_side, jpeg_quality)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, util.generateSessionId(), name, date, maxPhotos, unlockAt, util.nowIso(), createdBy, maxImageSide, jpegQuality);
+    `INSERT INTO events (id, session_id, name, event_date, max_photos_per_user, gallery_unlock_at, created_at, created_by, max_image_side, jpeg_quality, hide_filter_buttons)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, util.generateSessionId(), name, date, maxPhotos, unlockAt, util.nowIso(), createdBy, maxImageSide, jpegQuality, hideFilterButtons);
 
   return getEventWithStats(db, id);
 }
@@ -167,9 +169,14 @@ function updateEventFields(db, e, body) {
     jpegQuality: b.jpegQuality !== undefined ? b.jpegQuality : e.jpeg_quality,
   });
 
+  // Wegwerfkamera-Modus: Filter-Buttons in der Kamera ausblenden (Option).
+  const hideFilterButtons = b.hideFilterButtons !== undefined
+    ? (b.hideFilterButtons ? 1 : 0)
+    : (e.hide_filter_buttons ? 1 : 0);
+
   db.prepare(
-    `UPDATE events SET name = ?, event_date = ?, max_photos_per_user = ?, gallery_unlock_at = ?, max_image_side = ?, jpeg_quality = ? WHERE id = ?`
-  ).run(name, eventDate, maxPhotos, unlockAt, maxImageSide, jpegQuality, e.id);
+    `UPDATE events SET name = ?, event_date = ?, max_photos_per_user = ?, gallery_unlock_at = ?, max_image_side = ?, jpeg_quality = ?, hide_filter_buttons = ? WHERE id = ?`
+  ).run(name, eventDate, maxPhotos, unlockAt, maxImageSide, jpegQuality, hideFilterButtons, e.id);
 
   return getEventWithStats(db, e.id);
 }

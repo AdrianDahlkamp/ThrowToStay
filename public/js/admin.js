@@ -358,6 +358,15 @@
     unlockInput.value = toLocalInputValue(e.galleryUnlockAt);
     fUnlock.appendChild(unlockInput);
 
+    // Reiner Wegwerfkamera-Modus: Filter-Buttons in der Kamera ausblenden.
+    const fHideFilters = document.createElement('div');
+    fHideFilters.className = 'field';
+    fHideFilters.innerHTML = '<label class="tip" data-tip="Schaltet die Filter-Wechsler in der Kamera aus: Gäste sehen nur den Einweg-Kamera-Look. Das Original (ohne Filter) wird trotzdem immer gespeichert und in der Galerie zum Download angeboten.">Reiner Wegwerfkamera-Modus</label>';
+    const hideFiltersCb = document.createElement('input');
+    hideFiltersCb.type = 'checkbox';
+    hideFiltersCb.checked = !!e.hideFilterButtons;
+    fHideFilters.appendChild(hideFiltersCb);
+
     // Tabs: Basis-Einstellungen / Expert-Einstellungen
     const tabBar = document.createElement('div');
     tabBar.className = 'tabs';
@@ -380,7 +389,7 @@
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-stack';
-    expertGrid.append(fLimit, fSide, fQuality, fUnlock);
+    expertGrid.append(fLimit, fSide, fQuality, fUnlock, fHideFilters);
     panelExpert.appendChild(expertGrid);
 
     const usersBtn = document.createElement('button');
@@ -426,6 +435,7 @@
         maxPhotosPerUser: parseInt(limitInput.value, 10),
         maxImageSide: parseInt(sideInput.value, 10),
         jpegQuality: parseInt(qualityInput.value, 10),
+        hideFilterButtons: hideFiltersCb.checked,
       };
       if (unlockInput.value) {
         patch.galleryUnlockAt = new Date(unlockInput.value).toISOString();
@@ -522,13 +532,14 @@
 
   // ------------------------------------------------------------- Event-Wizard (wie im Veranstalter-Bereich)
 
-  const WIZ_STEPS = 4;
+  const WIZ_STEPS = 5;
   const wiz = {
     step: 0,
     name: '',
     maxPhotos: 30,
     maxSide: 2560, // Default: Preset „Mid“
     jpegQuality: 92,
+    hideFilterButtons: false, // Reiner Wegwerfkamera-Modus (Filter-Buttons ausblenden)
     unlockAt: '', // ISO
     creating: false,
   };
@@ -582,6 +593,7 @@
     if (wiz.step === 0) renderWizName(body);
     else if (wiz.step === 1) renderWizLimit(body);
     else if (wiz.step === 2) renderWizImage(body);
+    else if (wiz.step === 3) renderWizCamera(body);
     else renderWizUnlock(body);
 
     els.wizardBack.style.visibility = wiz.step === 0 ? 'hidden' : 'visible';
@@ -671,6 +683,27 @@
     body.append(wrap);
   }
 
+  function renderWizCamera(body) {
+    const h = document.createElement('div');
+    h.className = 'wizard-step-title';
+    h.textContent = 'Reiner Wegwerfkamera-Modus?';
+    const p = document.createElement('p');
+    p.className = 'wizard-step-text';
+    p.textContent = 'Standardmäßig können Gäste in der Kamera zwischen „Ohne“ und dem Einweg-Kamera-Filter wechseln. Schalte das aus, wenn du einen besonders immersiven Wegwerfkamera-Look willst: Die Kamera zeigt dann nur den Filter und die Wechsler bleiben weg. Das Original (ohne Filter) wird trotzdem immer mitgespeichert – Gäste können es jederzeit in der Galerie herunterladen.';
+
+    const field = document.createElement('div');
+    field.className = 'field';
+    const label = document.createElement('label');
+    label.className = 'check-line';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!wiz.hideFilterButtons;
+    cb.addEventListener('change', () => { wiz.hideFilterButtons = cb.checked; });
+    label.append(cb, document.createTextNode(' Filter-Buttons in der Kamera ausblenden (nur Einweg-Kamera-Look)'));
+    field.appendChild(label);
+    body.append(h, p, field);
+  }
+
   function renderWizUnlock(body) {
     const h = document.createElement('div');
     h.className = 'wizard-step-title';
@@ -713,6 +746,8 @@
     } else if (wiz.step === 2) {
       // Werte stammen aus dem gewählten Qualitätspreset (wiz.maxSide / wiz.jpegQuality)
     } else if (wiz.step === 3) {
+      // Reiner Wegwerfkamera-Modus (Checkbox) – keine Validierung nötig.
+    } else if (wiz.step === 4) {
       const v = els.wizardBody.querySelector('#wizUnlock').value;
       const t = v ? Date.parse(v) : NaN;
       if (Number.isNaN(t)) { toast('Bitte einen gültigen Freigabe-Zeitpunkt angeben.', true); return false; }
@@ -745,6 +780,7 @@
           maxPhotosPerUser: wiz.maxPhotos,
           maxImageSide: wiz.maxSide,
           jpegQuality: wiz.jpegQuality,
+          hideFilterButtons: wiz.hideFilterButtons,
           galleryUnlockAt: wiz.unlockAt,
         },
       });

@@ -1066,3 +1066,39 @@ body.event-page {
 .landing h1 { font-size: 22px; margin: 6px 0 10px; }
 .landing p { color: var(--text-dim); font-size: 14.5px; line-height: 1.55; }
 .landing .actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------- Galerie blättern (Lightbox) */
+.lightbox .lb-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  opacity: 0.85;
+}
+.lightbox .lb-nav-prev { left: 10px; }
+.lightbox .lb-nav-next { right: 10px; }
+.lightbox .lb-nav:active { transform: translateY(-50%) scale(0.92); }
+.lightbox .lb-nav svg { width: 26px; height: 26px; }
+
+/* ------------------------------------------------------------- Galerie-Skeleton (Lade-Feedback) */
+.photo-card.skeleton-card { pointer-events: none; }
+.photo-card.skeleton-card .imgwrap { cursor: default; }
+.skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.05) 30%, rgba(255, 255, 255, 0.13) 50%, rgba(255, 255, 255, 0.05) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+
+/* ------------------------------------------------------------- Foto-Limit-Vorlagen (Organizer) */
+.preset-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}

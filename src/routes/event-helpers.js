@@ -15,6 +15,13 @@ const SELECT_EVENT_STATS = `
          (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id) AS photo_count
   FROM events e`;
 
+// Foto-Limit pro Gast – Wegwerfkamera-Logik:
+//   27 = Klassiker (Kodak Fun Saver, die Standard-Einwegkamera)
+//   39 = Maximum (Kodak Fun Saver 39)
+// Dazwischen frei wählbar (z. B. eine bestimmte Zahl für ein Hochzeitsspiel).
+const DEFAULT_PHOTOS_PER_USER = 27;
+const MAX_PHOTOS_PER_USER = 39;
+
 function eventToJson(e) {
   return {
     id: e.id,
@@ -70,8 +77,8 @@ function createEvent(db, body, createdBy = null) {
   }
 
   let maxPhotos = parseInt((body || {}).maxPhotosPerUser, 10);
-  if (!Number.isFinite(maxPhotos)) maxPhotos = 30;
-  maxPhotos = Math.min(Math.max(maxPhotos, 1), 1000);
+  if (!Number.isFinite(maxPhotos)) maxPhotos = DEFAULT_PHOTOS_PER_USER;
+  maxPhotos = Math.min(Math.max(maxPhotos, 1), MAX_PHOTOS_PER_USER);
 
   let unlockAt;
   try {
@@ -150,8 +157,9 @@ function updateEventFields(db, e, body) {
   let maxPhotos = e.max_photos_per_user;
   if (b.maxPhotosPerUser !== undefined) {
     maxPhotos = parseInt(b.maxPhotosPerUser, 10);
-    if (!Number.isFinite(maxPhotos)) throw Object.assign(new Error('Ungültiges Foto-Limit.'), { status: 400 });
-    maxPhotos = Math.min(Math.max(maxPhotos, 1), 1000);
+    if (!Number.isFinite(maxPhotos) || maxPhotos < 1 || maxPhotos > MAX_PHOTOS_PER_USER)
+      throw Object.assign(new Error(`Ungültiges Foto-Limit (1–${MAX_PHOTOS_PER_USER}).`), { status: 400 });
+    maxPhotos = Math.min(Math.max(maxPhotos, 1), MAX_PHOTOS_PER_USER);
   }
 
   const { maxImageSide, jpegQuality } = parseImageSettings({

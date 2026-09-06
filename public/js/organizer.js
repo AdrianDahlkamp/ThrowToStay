@@ -304,10 +304,25 @@
 
     const fName = mkField('Event-Name', 'text', e.name);
     const fDate = mkField('Event-Datum', 'date', e.eventDate);
-    const fLimit = mkField('Max. Fotos pro User', 'number', e.maxPhotosPerUser,
-      'Maximale Anzahl an Fotos, die ein einzelner Gast bei diesem Event speichern kann. Standard: 30.');
+    const fLimit = mkField('Max. Fotos pro Gast', 'number', e.maxPhotosPerUser,
+      'Wie viele Fotos ein einzelner Gast machen darf. Vorlagen: Kodak Fun Saver (27) und Kodak Fun Saver 39 (Maximum). Eigene Zahl (1–39) möglich.');
     fLimit.querySelector('input').min = '1';
-    fLimit.querySelector('input').max = '1000';
+    fLimit.querySelector('input').max = '39';
+    // Vorlagen-Buttons (Einwegkamera-Modelle) direkt am Feld.
+    const fLimitPresets = document.createElement('div');
+    fLimitPresets.className = 'preset-row';
+    for (const pr of PHOTO_PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn small secondary';
+      b.textContent = `${pr.label} · ${pr.count}`;
+      b.title = pr.hint;
+      b.addEventListener('click', () => {
+        fLimit.querySelector('input').value = String(pr.count);
+        fLimit.querySelector('input').dispatchEvent(new Event('input'));
+      });
+      fLimitPresets.appendChild(b);
+    }
     const fSide = mkField('Max. Bildgröße (längste Seite, px)', 'number', e.maxImageSide,
       'Längste Seite des gespeicherten Fotos in Pixeln. Höher = mehr Detail, aber deutlich größere Dateien. Standard: 1600, Maximum: 4096.');
     fSide.querySelector('input').min = '640';
@@ -341,7 +356,7 @@
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-stack';
-    expertGrid.append(fLimit, fSide, fQuality, fUnlock);
+    expertGrid.append(fLimit, fLimitPresets, fSide, fQuality, fUnlock);
     panelExpert.appendChild(expertGrid);
 
     const usersBtn = document.createElement('button');
@@ -489,7 +504,7 @@
   const wiz = {
     step: 0,
     name: '',
-    maxPhotos: 30,
+    maxPhotos: 27, // Default: Preset „Kodak Fun Saver“ (Klassiker)
     maxSide: 2560, // Default: Preset „Mid“
     jpegQuality: 92,
     unlockAt: '', // ISO
@@ -507,7 +522,7 @@
   function openWizard() {
     wiz.step = 0;
     wiz.name = '';
-    wiz.maxPhotos = 30;
+    wiz.maxPhotos = 27; // Default: Preset „Kodak Fun Saver“ (Klassiker)
     wiz.maxSide = 2560; // Default: Preset „Mid“
     wiz.jpegQuality = 92;
     wiz.unlockAt = new Date(defaultUnlockLocal()).toISOString();
@@ -560,32 +575,49 @@
     setTimeout(() => input.focus(), 30);
   }
 
+  // Foto-Limit-Presets, benannt nach den bekanntesten Einwegkameras.
+  const WIZ_MAX_PHOTOS = 39; // Maximum = „Kodak Fun Saver 39“
+  const PHOTO_PRESETS = [
+    { label: 'Kodak Fun Saver', count: 27, hint: 'Der Klassiker – die Standard-Einwegkamera (27 Bilder)' },
+    { label: 'Kodak Fun Saver 39', count: 39, hint: 'Maximum – die längste Kassette (39 Bilder)' },
+  ];
+
   function renderWizLimit(body) {
     const h = document.createElement('div');
     h.className = 'wizard-step-title';
     h.textContent = 'Wie viele Fotos darf ein Gast machen?';
     const p = document.createElement('p');
     p.className = 'wizard-step-text';
-    p.textContent = 'Maximale Anzahl an Fotos, die ein einzelner Gast bei diesem Event speichern kann. Bei Überschreitung kann dieser Gast keine weiteren Fotos aufnehmen.';
+    p.textContent = 'Wähle eine Einwegkamera-Vorlage oder gib eine eigene Zahl an (z. B. für ein bestimmtes Spiel). Bei Erreichen des Limits kann der Gast keine weiteren Fotos aufnehmen.';
+
     const quick = document.createElement('div');
     quick.className = 'wizard-quick';
-    const qBtn = document.createElement('button');
-    qBtn.className = 'btn small secondary';
-    qBtn.type = 'button';
-    qBtn.textContent = 'Standard: 30';
-    qBtn.addEventListener('click', () => { wiz.maxPhotos = 30; renderWizard(); });
-    quick.appendChild(qBtn);
+    for (const pr of PHOTO_PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn small secondary';
+      b.textContent = `${pr.label} · ${pr.count}`;
+      b.title = pr.hint;
+      b.addEventListener('click', () => { wiz.maxPhotos = pr.count; renderWizard(); });
+      quick.appendChild(b);
+    }
+    body.append(h, p, quick);
+
     const field = document.createElement('div');
     field.className = 'field';
-    field.innerHTML = '<label for="wizLimit">Max. Fotos pro Gast</label>';
+    field.innerHTML = '<label for="wizLimit">Eigene Anzahl (1–' + WIZ_MAX_PHOTOS + ')</label>';
     const input = document.createElement('input');
     input.id = 'wizLimit';
     input.type = 'number';
     input.min = '1';
-    input.max = '1000';
+    input.max = String(WIZ_MAX_PHOTOS);
     input.value = wiz.maxPhotos;
+    input.addEventListener('input', () => {
+      const v = parseInt(input.value, 10);
+      if (Number.isFinite(v)) wiz.maxPhotos = Math.min(Math.max(v, 1), WIZ_MAX_PHOTOS);
+    });
     field.appendChild(input);
-    body.append(h, p, quick, field);
+    body.append(field);
   }
 
   // Qualitätspresets für den Wizard (Low / Mid / High, ohne Slider & Preview).
@@ -672,7 +704,8 @@
     } else if (wiz.step === 1) {
       const v = parseInt(els.wizardBody.querySelector('#wizLimit').value, 10);
       if (!Number.isFinite(v) || v < 1) { toast('Bitte ein gültiges Foto-Limit angeben.', true); return false; }
-      wiz.maxPhotos = Math.min(v, 1000);
+      if (v > WIZ_MAX_PHOTOS) { toast(`Maximal ${WIZ_MAX_PHOTOS} Fotos pro Gast (Kodak Fun Saver 39).`, true); return false; }
+      wiz.maxPhotos = v;
     } else if (wiz.step === 2) {
       // Werte kommen aus dem gewählten Qualitätspreset (wiz.maxSide / wiz.jpegQuality)
     } else if (wiz.step === 3) {

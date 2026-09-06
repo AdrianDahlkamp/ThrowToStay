@@ -39,6 +39,7 @@
     galleryHint: $('galleryHint'), selectToggle: $('selectToggle'), lockedBanner: $('lockedBanner'), photoGrid: $('photoGrid'),
     selectBar: $('selectBar'), selectCount: $('selectCount'), selectAllBtn: $('selectAllBtn'), downloadSelBtn: $('downloadSelBtn'),
     lightbox: $('lightbox'), lbImg: $('lbImg'), lbName: $('lbName'), lbClose: $('lbClose'),
+    lbPrev: $('lbPrev'), lbNext: $('lbNext'),
     lbVariantBtns: $('lbVariantBtns'), lbFilterChips: $('lbFilterChips'),
     onboard: $('onboard'), onboardEventName: $('onboardEventName'), onboardForm: $('onboardForm'),
     onboardSteps: document.querySelectorAll('#onboardForm .onboard-step'),
@@ -557,6 +558,19 @@ state.track = null;
     }
   }
 
+  /** Lade-Platzhalter für das Raster, bis die Fotos geladen sind – macht den
+   *  Galerie-Wechsel sofort sichtbar (native-App-Feeling statt leerer Fläche). */
+  function showGallerySkeleton() {
+    const grid = els.photoGrid;
+    grid.innerHTML = '';
+    for (let i = 0; i < 8; i++) {
+      const card = document.createElement('div');
+      card.className = 'photo-card skeleton-card';
+      card.innerHTML = '<div class="imgwrap"><div class="skeleton-shimmer"></div></div>';
+      grid.appendChild(card);
+    }
+  }
+
   function renderGrid() {
     const grid = els.photoGrid;
     grid.innerHTML = '';
@@ -843,6 +857,15 @@ state.track = null;
     els.lightbox.classList.add('visible');
   }
 
+  /** In der Galerie blättern (dir: +1 = nächstes, -1 = vorheriges). */
+  function lbNav(dir) {
+    const idx = state.photos.findIndex(x => x.id === state.lbPhotoId);
+    if (idx < 0) return;
+    const next = idx + dir;
+    if (next < 0 || next >= state.photos.length) return;
+    openLightbox(state.photos[next]);
+  }
+
   function renderLightbox() {
     const p = state.photos.find(x => x.id === state.lbPhotoId);
     if (!p) { closeLightbox(); return; }
@@ -898,6 +921,11 @@ state.track = null;
       renderFilterChips(chipsWrap, p.filterId || 'none', id => refilterPhoto(p, id));
       els.lbFilterChips.append(label, chipsWrap);
     }
+
+    // Navigation: an den Rändern des Albums deaktivieren.
+    const idx = state.photos.findIndex(x => x.id === p.id);
+    els.lbPrev.disabled = idx <= 0;
+    els.lbNext.disabled = idx >= state.photos.length - 1;
   }
 
   async function refilterPhoto(p, filterId) {
@@ -980,6 +1008,9 @@ state.track = null;
     els.tabCamera.classList.toggle('active', mode === 'camera');
     els.tabGallery.classList.toggle('active', mode === 'gallery');
     if (mode === 'gallery') {
+      // Sofort sichtbares Feedback: beim ersten Öffnen Skeleton statt leerer
+      // Fläche zeigen; bei Folgeöffnungen bleibt der Inhalt stehen (kein Flackern).
+      if (!state.photos.length) showGallerySkeleton();
       loadGallery().catch(err => toast(err.message, true));
     } else {
       // Kamera-Modus: Auswahl-Leiste automatisch ausblenden.
@@ -1126,7 +1157,29 @@ state.track = null;
   els.downloadSelBtn.addEventListener('click', downloadSelected);
   els.lbClose.addEventListener('click', closeLightbox);
   els.lightbox.addEventListener('click', ev => { if (ev.target === els.lightbox) closeLightbox(); });
+  // Galerie blättern: Buttons + horizontaler Touch-Swipe.
+  els.lbPrev.addEventListener('click', ev => { ev.stopPropagation(); lbNav(-1); });
+  els.lbNext.addEventListener('click', ev => { ev.stopPropagation(); lbNav(1); });
+  let lbTouchX = null, lbTouchY = null;
+  els.lightbox.addEventListener('touchstart', ev => {
+    const t = ev.changedTouches[0];
+    lbTouchX = t.clientX; lbTouchY = t.clientY;
+  }, { passive: true });
+  els.lightbox.addEventListener('touchend', ev => {
+    if (lbTouchX === null) return;
+    const t = ev.changedTouches[0];
+    const dx = t.clientX - lbTouchX;
+    const dy = t.clientY - lbTouchY;
+    lbTouchX = lbTouchY = null;
+    // Nur klare horizontale Swipes (min. 50px, dominiert über Vertikales).
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) lbNav(dx < 0 ? 1 : -1);
+  }, { passive: true });
   document.addEventListener('keydown', ev => {
+    // Pfeiltasten blättern in der offenen Galerie.
+    if (els.lightbox.classList.contains('visible')) {
+      if (ev.key === 'ArrowRight') { lbNav(1); return; }
+      if (ev.key === 'ArrowLeft') { lbNav(-1); return; }
+    }
     if (ev.key !== 'Escape') return;
     if (els.shareOverlay.classList.contains('visible')) closeShare();
     else closeLightbox();

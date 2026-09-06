@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS events (
   session_id          TEXT NOT NULL UNIQUE,
   name                TEXT NOT NULL,
   event_date          TEXT NOT NULL,
-  max_photos_per_user INTEGER NOT NULL DEFAULT 30,
+  max_photos_per_user INTEGER NOT NULL DEFAULT 27,
   gallery_unlock_at   TEXT NOT NULL,
   created_at          TEXT NOT NULL,
   created_by          TEXT,

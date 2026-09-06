@@ -52,6 +52,11 @@
     grainAmp: 8,          // Gesamtkörnung (0–255)
     grainCoarse: 0.6,     // Gewicht der groben (1/4) Schicht – gibt das „Klümpchen"
     grainShadow: 0.5,     // Extra-Korn in den Tiefs
+    // Stufe 2 – Lens-Character (Einweg-Plastiklinse): Weichzeichnung + CA
+    lensSoftBase: 0.16,   // Weichzeichnung in der Mitte (Plastiklinse nie perfekt scharf)
+    lensSoftCorner: 0.82, // Weichzeichnung in den Ecken (stark – größter „App-Filter"-Tell)
+    lensBlurScale: 4,     // Blur-Auflösung der Ecken (kleiner = weicher)
+    lensCA: 2.4,          // Chromatische Aberration in px an den Rändern (R/B-Verlauf)
   };
 
   // --------------------------------------------------------------- Ton-Kurve
@@ -136,6 +141,80 @@
     ctx.restore();
   }
 
+  // --------------------------------------------------------------- Lens-Character
+  // Chromatische Aberration: R und B werden radial leicht versetzt (R nach
+  // außen, B nach innen, G bleibt) – Violett/Grün-Verläufe an Kanten, die zur
+  // Ecke hin stärker werden. Typisch für günstige Linsen.
+  function chromaticAberration(ctx, w, h, strength) {
+    if (strength <= 0) return;
+    const img = ctx.getImageData(0, 0, w, h);
+    const a = img.data;
+    const src = new Uint8ClampedArray(a); // unversehrte Quelle für die Offset-Samples
+    const cx = w / 2, cy = h / 2;
+    const maxD = Math.hypot(cx, cy);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 1e-3) continue; // exakt Mitte: kein Versatz
+        const off = strength * (dist / maxD); // px, wächst zur Ecke hin
+        const nx = dx / dist, ny = dy / dist;
+        const ox = Math.round(off * nx), oy = Math.round(off * ny);
+        const rx = Math.min(w - 1, Math.max(0, x + ox));
+        const ry = Math.min(h - 1, Math.max(0, y + oy));
+        const bx = Math.min(w - 1, Math.max(0, x - ox));
+        const by = Math.min(h - 1, Math.max(0, y - oy));
+        const i = (y * w + x) * 4;
+        a[i] = src[(ry * w + rx) * 4];       // R aus nach außen versetzter Quelle
+        a[i + 2] = src[(by * w + bx) * 4];   // B aus nach innen versetzter Quelle
+        // G (a[i+1]) bleibt unverändert
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // --------------------------------------------------------------- Lens-Character
+  // Ecken-Weichzeichnung (MTF): Eine weichere Kopie wird radial eingeblendet –
+  // in der Mitte fast unsichtbar (baseSoft), in den Ecken deutlich (cornerSoft).
+  // Das tötet die „perfekt scharfe Handy"-Wirkung: günstige Linsen sind in den
+  // Ecken weich, in der Mitte passabel.
+  function cornerSoftness(ctx, w, h, baseSoft, cornerSoft, blurScale) {
+    if (cornerSoft <= 0 && baseSoft <= 0) return;
+    const cx = w / 2, cy = h / 2;
+    const maxD = Math.hypot(cx, cy);
+    // weiche Kopie: Downscale → Upscale (Gaussian-artiger Blur ohne ctx.filter)
+    const sw = Math.max(1, Math.round(w / blurScale));
+    const sh = Math.max(1, Math.round(h / blurScale));
+    const sc = document.createElement('canvas');
+    sc.width = sw; sc.height = sh;
+    const sctx = sc.getContext('2d', { willReadFrequently: true });
+    sctx.drawImage(ctx.canvas, 0, 0, sw, sh);
+    const up = document.createElement('canvas');
+    up.width = w; up.height = h;
+    const uctx = up.getContext('2d');
+    uctx.imageSmoothingEnabled = true;
+    uctx.imageSmoothingQuality = 'high';
+    uctx.drawImage(sc, 0, 0, w, h);
+    const soft = uctx.getImageData(0, 0, w, h).data;
+    const sharp = ctx.getImageData(0, 0, w, h).data;
+    const out = ctx.createImageData(w, h);
+    const o = out.data;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = x - cx, dy = y - cy;
+        const d = Math.hypot(dx, dy) / maxD; // 0 Mitte, 1 Ecke
+        const t = d * d;                     // Weichheit wächst quadratisch zur Ecke
+        const bw = baseSoft + (cornerSoft - baseSoft) * t;
+        const i = (y * w + x) * 4;
+        o[i]     = sharp[i]     * (1 - bw) + soft[i]     * bw;
+        o[i + 1] = sharp[i + 1] * (1 - bw) + soft[i + 1] * bw;
+        o[i + 2] = sharp[i + 2] * (1 - bw) + soft[i + 2] * bw;
+        o[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
   const defs = [
     {
       id: 'none',
@@ -187,8 +266,13 @@
           a[i + 2] = clamp(B + gn);
         }
         ctx.putImageData(img, 0, 0);
-        // 6) Halation (rot-betonter Glow) + 7) Vignette
+        // 6) Chromatische Aberration (Lens-Character)
+        chromaticAberration(ctx, w, h, FILM.lensCA);
+        // 7) Halation (rot-betonter Glow um Lichter)
         warmHalation(ctx, w, h);
+        // 8) Ecken-Weichzeichnung (MTF, Lens-Character)
+        cornerSoftness(ctx, w, h, FILM.lensSoftBase, FILM.lensSoftCorner, FILM.lensBlurScale);
+        // 9) Vignette
         vignette(ctx, w, h, 0.32);
       },
     },

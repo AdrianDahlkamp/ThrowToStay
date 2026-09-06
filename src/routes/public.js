@@ -22,7 +22,11 @@ const path = require('path');
 const archiver = require('archiver');
 const multer = require('multer');
 const QRCode = require('qrcode');
+const sharp = require('sharp');
 const util = require('../util');
+
+const THUMB_MAX_SIDE = 512; // Kantenlänge für Raster-Thumbnails
+const THUMB_QUALITY = 72;
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB pro Bilddatei
 const MAX_ZIP_ITEMS = 500;
@@ -297,12 +301,28 @@ function createPublicRouter({ db, dataDir }) {
         return res.status(404).json({ error: 'Diese Variante existiert nicht.' });
       }
 
-      // Raster: kleines Thumbnail ausliefern, falls vorhanden (sonst Vollbild).
+      // Raster: kleines Thumbnail ausliefern. Liegt eines vor (beim Upload
+      // erzeugt oder bereits gecacht), wird es direkt serviert; sonst wird es
+      // hier on-the-fly erzeugt und gecacht – so werden auch ältere Fotos, die
+      // ohne Thumbnail hochgeladen wurden, schnell (einmalig, danach Cache).
       let filePath = storedPathFor(event, owner.uuid, filename);
       if (wantThumb) {
+        const full = storedPathFor(event, owner.uuid, filename);
         const thumbPath = storedPathFor(event, owner.uuid, thumbFilename(filename));
         const hasThumb = await fsp.access(thumbPath).then(() => true, () => false);
-        if (hasThumb) filePath = thumbPath;
+        if (hasThumb) {
+          filePath = thumbPath;
+        } else {
+          try {
+            await sharp(full)
+              .resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true })
+              .jpeg({ quality: THUMB_QUALITY })
+              .toFile(thumbPath);
+            filePath = thumbPath;
+          } catch (e) {
+            filePath = full; // Fallback: Vollbild, falls die Erzeugung scheitert
+          }
+        }
       }
 
       const download = req.query.download === '1';

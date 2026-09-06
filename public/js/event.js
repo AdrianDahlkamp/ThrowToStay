@@ -206,6 +206,16 @@ state.track = null;
     els.video.style.transform = '';
   }
 
+  /** Vorschau-Transform setzen: Spiegelung (Selfie) + digitaler Zoom kombiniert.
+   *  Die Spiegelung (Front-Kamera) ist rein optisch – die Vorschau zeigt das
+   *  Bild wie im Spiegel, damit man sich gut ausrichten kann. Das tatsächlich
+   *  gespeicherte Foto wird NICHT gespiegelt (unverfälschte Originalorientierung). */
+  function updateVideoTransform() {
+    const mirror = state.facing === 'user' ? 'scaleX(-1) ' : '';
+    const zoom = (state.zoomMode === 'digital' && state.zoom > 1) ? `scale(${state.zoom})` : '';
+    els.video.style.transform = mirror + zoom;
+  }
+
   /** Zoom & Blitz-Fähigkeiten des aktuellen Tracks ermitteln. */
   function setupZoomAndTorch() {
     state.zoom = 1;
@@ -213,7 +223,7 @@ state.track = null;
     state.zoomCaps = null;
     state.torchCapable = false;
     state.track = null;
-    els.video.style.transform = '';
+    updateVideoTransform();
 
     const track = state.stream && state.stream.getVideoTracks()[0];
     state.track = track || null;
@@ -247,9 +257,9 @@ state.track = null;
     els.zoomLabel.textContent = `${v.toFixed(1).replace('.', ',')}×`;
     if (state.zoomMode === 'native' && state.track) {
       state.track.applyConstraints({ advanced: [{ zoom: v }] }).catch(() => {});
-    } else {
-      els.video.style.transform = v > 1 ? `scale(${v})` : '';
     }
+    // Spiegelung (Selfie) bleibt bei jedem Zoom aktiv; digitaler Zoom per CSS.
+    updateVideoTransform();
   }
 
   async function setTorch(on) {

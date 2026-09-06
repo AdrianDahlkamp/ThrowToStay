@@ -78,6 +78,7 @@ function createPublicRouter({ db, dataDir }) {
         maxPhotosPerUser: event.max_photos_per_user,
         maxImageSide: event.max_image_side,
         jpegQuality: event.jpeg_quality,
+        hideFilterButtons: !!event.hide_filter_buttons,
         galleryUnlockAt: event.gallery_unlock_at,
         galleryUnlocked: unlocked,
       },

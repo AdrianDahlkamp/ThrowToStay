@@ -1120,6 +1120,10 @@ state.track = null;
     els.fxGrain.style.backgroundImage = `url(${window.TTSFilters.grainTile()})`;
     renderFilterChips(els.filterRow, state.filter, setFilter);
 
+    // Foto-Zähler sofort beim Initial-Load anzeigen (auch für zurückkehrende
+    // Nutzer, die schon beigetreten sind – sonst erst nach dem 1. Foto).
+    updateCounter();
+
     if (!state.user) {
       showOnboard(false, false);
     }

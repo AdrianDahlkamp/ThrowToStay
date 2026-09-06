@@ -226,16 +226,21 @@
   }
 
   function captureToCanvas(source, sw, sh, filterId, maxSide = 1600, zoom = 1) {
-    const scale = Math.min(1, maxSide / Math.max(sw, sh));
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(sw * scale));
-    c.height = Math.max(1, Math.round(sh * scale));
-    const x = c.getContext('2d');
-    const dx = sw / (2 * zoom), dy = sh / (2 * zoom), dsz = Math.min(sw, sh) / zoom;
-    x.drawImage(source, sw / 2 - dx, sh / 2 - dy, dsz, dsz, 0, 0, c.width, c.height);
-    const f = get(filterId);
-    f.apply(x, c.width, c.height);
-    return c;
+    // Zentraler Zoom-Crop, seitenverhältnis-treu (Crop und Ziel haben dasselbe
+    // Seitenverhältnis – sonst werden die Bilder gestaucht).
+    const z = Math.max(1, zoom || 1);
+    const cropW = sw / z;
+    const cropH = sh / z;
+    const cropX = (sw - cropW) / 2;
+    const cropY = (sh - cropH) / 2;
+    const scale = Math.min(1, maxSide / Math.max(cropW, cropH));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(cropW * scale));
+    canvas.height = Math.max(1, Math.round(cropH * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    if (filterId && filterId !== 'none') applyToCanvas(canvas, filterId);
+    return canvas;
   }
 
   function canvasToCanvas(src, filterId, maxSide = 1600) {

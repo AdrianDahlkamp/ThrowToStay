@@ -424,7 +424,10 @@ state.track = null;
     updateCounter();
     const photo = data.photo;
     state.photos.push(photo);
-    state.variantOf.set(photo.id, defaultVariant(photo));
+    // KEINE Variante lokal einbrennen: Die Standardvariante ("so wie
+    // aufgenommen") wird dynamisch via defaultVariant() berechnet und passt
+    // sich automatisch an, wenn die Filter-Variante im Follow-up nachgereicht
+    // wird (zu Upload-Zeit existiert sie noch nicht → hasFiltered=false).
     // Filter-Variante im Hintergrund erzeugen + anhängen (blockiert den
     // Auslöser nicht). Best-Effort: schlug sie fehl, kann sie jeder per
     // Funkel-Button nachträglich erzeugen.
@@ -474,20 +477,16 @@ state.track = null;
   async function loadGallery() {
     if (!state.user) return;
     const data = await api(`/api/e/${SID}/photos?` + qs({ uuid: state.uuid }));
-    // Frisch geladene Liste mit lokalen Varianten-Overrides mergen.
+    // Frisch geladene Liste. variantOf enthält nur explizite Nutzer-Wahl
+    // (Variante manuell umgeschaltet) – die Standardvariante wird dynamisch
+    // via defaultVariant() berechnet, damit "so wie aufgenommen" immer stimmt.
     if (state.event) state.event.galleryUnlocked = data.galleryUnlocked;
-    const overrides = state.variantOf;
     state.photos = data.photos;
-    state.variantOf = new Map();
-    for (const p of state.photos) {
-      const v = overrides.get(p.id);
-      state.variantOf.set(p.id, v === 'filtered' && !p.hasFiltered ? 'original' : (v || defaultVariant(p)));
-    }
-    // Auswahlbereinigung: Fotos, die es nicht mehr gibt, aus der Auswahl entfernen.
+    // Bereinigung: Fotos, die es nicht mehr gibt, aus Varianten-Wahl und
+    // Mehrfachauswahl entfernen.
     const ids = new Set(state.photos.map(p => p.id));
-    for (const id of [...state.selected.keys()]) {
-      if (!ids.has(id)) state.selected.delete(id);
-    }
+    for (const id of [...state.variantOf.keys()]) if (!ids.has(id)) state.variantOf.delete(id);
+    for (const id of [...state.selected.keys()]) if (!ids.has(id)) state.selected.delete(id);
     renderLockedBanner(data.galleryUnlocked, data.galleryUnlockAt);
     renderGrid();
   }

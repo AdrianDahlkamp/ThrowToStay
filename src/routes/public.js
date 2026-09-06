@@ -112,6 +112,16 @@ function createPublicRouter({ db, dataDir }) {
     return { filename, ext };
   }
 
+  // Thumbnail-Namen aus dem Vollbild-Namen ableiten (Konvention, kein DB-Feld):
+  // "…-original.jpg" -> "…-original-thumb.jpg". Damit bleibt die Galerie schnell,
+  // ohne dass das Schema geändert werden muss; fehlt das Thumb (alte Fotos), wird
+  // beim Ausliefern auf das Vollbild zurückgegriffen.
+  function thumbFilename(file) {
+    if (!file) return null;
+    const dot = file.lastIndexOf('.');
+    return dot > 0 ? file.slice(0, dot) + '-thumb' + file.slice(dot) : file + '-thumb.jpg';
+  }
+
   // ------------------------------------------------------------- Endpunkte
 
   // Status des Events + des eingeloggten (per UUID bekannten) Users.
@@ -174,6 +184,7 @@ function createPublicRouter({ db, dataDir }) {
   router.post('/:sessionId/photos', upload.fields([
     { name: 'original', maxCount: 1 },
     { name: 'filtered', maxCount: 1 },
+    { name: 'original_thumb', maxCount: 1 },
   ]), async (req, res, next) => {
     try {
       const event = getEventBySession(req.params.sessionId);
@@ -200,6 +211,10 @@ function createPublicRouter({ db, dataDir }) {
       const baseName = `${Date.now()}-${photoCountForUser(user.id) + 1}-${photoIdShort()}`;
 
       const original = await persistUpload(req.files.original[0].path, event, user.uuid, baseName, 'original');
+      // Raster-Thumbnail fürs Original (klein, schnelle Galerie).
+      if (req.files.original_thumb && req.files.original_thumb[0]) {
+        await persistUpload(req.files.original_thumb[0].path, event, user.uuid, baseName, 'original-thumb');
+      }
       // Die Filter-Variante wird immer gespeichert, wenn sie mitgesendet wird
       // (der Client erzeugt sie bei jeder Aufnahme) – so sind beide Varianten
       // zum Download verfügbar, unabhängig von der gewählten Standard-Ansicht.
@@ -276,12 +291,20 @@ function createPublicRouter({ db, dataDir }) {
       }
 
       const wantFiltered = req.query.variant === 'filtered';
+      const wantThumb = req.query.thumb === '1';
       const filename = wantFiltered ? photo.filtered_file : photo.original_file;
       if (!filename || !util.isSafeStoredFilename(filename)) {
         return res.status(404).json({ error: 'Diese Variante existiert nicht.' });
       }
 
-      const filePath = storedPathFor(event, owner.uuid, filename);
+      // Raster: kleines Thumbnail ausliefern, falls vorhanden (sonst Vollbild).
+      let filePath = storedPathFor(event, owner.uuid, filename);
+      if (wantThumb) {
+        const thumbPath = storedPathFor(event, owner.uuid, thumbFilename(filename));
+        const hasThumb = await fsp.access(thumbPath).then(() => true, () => false);
+        if (hasThumb) filePath = thumbPath;
+      }
+
       const download = req.query.download === '1';
       const base = util.sanitizeFilename(
         `ThrowToStay-${photo.created_at.slice(0, 10)}-${photo.id.slice(0, 8)}`,
@@ -299,7 +322,10 @@ function createPublicRouter({ db, dataDir }) {
 
   // Filter nachträglich ändern (nur der Besitzer): neue gefilterte Variante hochladen
   // oder mit filterId="none" die gefilterte Variante entfernen.
-  router.post('/:sessionId/photos/:photoId/refilter', upload.single('filtered'), async (req, res, next) => {
+  router.post('/:sessionId/photos/:photoId/refilter', upload.fields([
+    { name: 'filtered', maxCount: 1 },
+    { name: 'filtered_thumb', maxCount: 1 },
+  ]), async (req, res, next) => {
     try {
       const event = getEventBySession(req.params.sessionId);
       if (!event) return res.status(404).json({ error: 'Event nicht gefunden.' });
@@ -314,11 +340,14 @@ function createPublicRouter({ db, dataDir }) {
       const filterId = String(req.body.filterId || '').slice(0, 32);
       if (!filterId) return res.status(400).json({ error: 'filterId fehlt.' });
 
+      const filteredFile = req.files && req.files.filtered && req.files.filtered[0];
+      const filteredThumb = req.files && req.files.filtered_thumb && req.files.filtered_thumb[0];
       if (filterId === 'none') {
         // Entfernen der Filter-Variante: immer nur der Besitzer.
         if (!isOwner) return res.status(403).json({ error: 'Nur der Besitzer kann die Filter-Variante entfernen.' });
         if (photo.filtered_file) {
           await fsp.unlink(storedPathFor(event, owner.uuid, photo.filtered_file)).catch(() => {});
+          await fsp.unlink(storedPathFor(event, owner.uuid, thumbFilename(photo.filtered_file))).catch(() => {});
         }
         db.prepare('UPDATE photos SET filtered_file = NULL, filter_id = NULL WHERE id = ?').run(photo.id);
       } else {
@@ -334,10 +363,16 @@ function createPublicRouter({ db, dataDir }) {
         if (hasExisting && !isOwner) {
           return res.status(403).json({ error: 'Nur der Foto-Besitzer kann diese Filter-Variante ersetzen.' });
         }
-        if (!req.file) return res.status(400).json({ error: 'Gefiltertes Bild fehlt.' });
+        if (!filteredFile) return res.status(400).json({ error: 'Gefiltertes Bild fehlt.' });
         const baseName = photo.original_file.replace(/-original\.[a-z0-9]+$/i, '');
         // Die Datei gehört zum Foto: immer im Ordner des Besitzers speichern.
-        const filtered = await persistUpload(req.file.path, event, owner.uuid, baseName, 'filtered');
+        const filtered = await persistUpload(filteredFile.path, event, owner.uuid, baseName, 'filtered');
+        // Thumbnail neu anlegen (oder aufräumen, wenn keines mitgesendet wurde).
+        if (filteredThumb) {
+          await persistUpload(filteredThumb.path, event, owner.uuid, baseName, 'filtered-thumb');
+        } else if (photo.filtered_file) {
+          await fsp.unlink(storedPathFor(event, owner.uuid, thumbFilename(photo.filtered_file))).catch(() => {});
+        }
         db.prepare('UPDATE photos SET filtered_file = ?, filter_id = ? WHERE id = ?')
           .run(filtered.filename, filterId, photo.id);
       }

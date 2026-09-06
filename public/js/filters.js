@@ -165,8 +165,8 @@
         const bx = Math.min(w - 1, Math.max(0, x - ox));
         const by = Math.min(h - 1, Math.max(0, y - oy));
         const i = (y * w + x) * 4;
-        a[i] = src[(ry * w + rx) * 4];       // R aus nach außen versetzter Quelle
-        a[i + 2] = src[(by * w + bx) * 4];   // B aus nach innen versetzter Quelle
+        a[i] = src[(ry * w + rx) * 4];         // R aus R-Kanal, nach außen versetzt
+        a[i + 2] = src[(by * w + bx) * 4 + 2]; // B aus B-Kanal, nach innen versetzt
         // G (a[i+1]) bleibt unverändert
       }
     }

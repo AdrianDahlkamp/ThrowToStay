@@ -397,6 +397,28 @@ state.track = null;
     }
   }
 
+  // Kleines Raster-Thumbnail aus einem Canvas/Bitmap erzeugen (~512px, JPEG).
+  // Damit lädt die Galerie schnell (Vollbild bleibt für Lightbox/Download).
+  function makeThumbBlob(source, maxSide = 512, quality = 0.72) {
+    return new Promise((resolve) => {
+      try {
+        const w = source.width, h = source.height;
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        const tw = Math.max(1, Math.round(w * scale));
+        const th = Math.max(1, Math.round(h * scale));
+        const c = document.createElement('canvas');
+        c.width = tw; c.height = th;
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(source, 0, 0, tw, th);
+        c.toBlob(resolve, 'image/jpeg', quality);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
   function queueUpload(item) {
     state.uploadChain = state.uploadChain.then(() => sendUpload(item)).catch(() => {
       state.failedUploads.push(item);
@@ -412,6 +434,11 @@ state.track = null;
     fd.set('original', item.originalBlob, 'original.jpg');
     // Filter-Variante wird immer mitgesendet (wird bei der Aufnahme erzeugt).
     if (item.filteredBlob) fd.set('filtered', item.filteredBlob, 'filtered.jpg');
+    // Raster-Thumbnail (schnelle Galerie) – optional, aus dem Original-Frame.
+    if (item._followUp && item._followUp.canvas) {
+      const thumb = await makeThumbBlob(item._followUp.canvas);
+      if (thumb) fd.set('original_thumb', thumb, 'original-thumb.jpg');
+    }
 
     const res = await fetch(`/api/e/${SID}/photos`, { method: 'POST', body: fd });
     if (!res.ok) {
@@ -450,6 +477,8 @@ state.track = null;
     fd.set('uuid', state.uuid);
     fd.set('filterId', fu.filterId);
     fd.set('filtered', filteredBlob, 'filtered.jpg');
+    const filteredThumb = await makeThumbBlob(fc);
+    if (filteredThumb) fd.set('filtered_thumb', filteredThumb, 'filtered-thumb.jpg');
     const res = await fetch(`/api/e/${SID}/photos/${photo.id}/refilter`, { method: 'POST', body: fd });
     if (res.ok) {
       try {
@@ -552,7 +581,8 @@ state.track = null;
     wrap.className = 'imgwrap';
     const img = document.createElement('img');
     img.loading = 'lazy';
-    img.src = fileUrl(p, variant);
+    img.decoding = 'async';
+    img.src = fileUrl(p, variant, { thumb: 1 });
     img.alt = 'Foto von ' + shortName(p);
     wrap.appendChild(img);
 
@@ -652,7 +682,7 @@ state.track = null;
     const card = grid.children[idx];
     if (card) {
       const img = card.querySelector('img');
-      img.src = fileUrl(p, variant);
+      img.src = fileUrl(p, variant, { thumb: 1 });
       const btns = card.querySelectorAll('.variant-btn');
       btns.forEach(b => b.classList.remove('active'));
       btns[variant === 'original' ? 0 : 1].classList.add('active');
@@ -876,7 +906,11 @@ state.track = null;
       const fd = new FormData();
       fd.set('uuid', state.uuid);
       fd.set('filterId', filterId);
-      if (filterId !== 'none') fd.set('filtered', filteredBlob, 'filtered.jpg');
+      if (filterId !== 'none') {
+        fd.set('filtered', filteredBlob, 'filtered.jpg');
+        const thumb = await makeThumbBlob(canvas);
+        if (thumb) fd.set('filtered_thumb', thumb, 'filtered-thumb.jpg');
+      }
 
       const res = await fetch(`/api/e/${SID}/photos/${p.id}/refilter`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Filter konnte nicht gespeichert werden.');
@@ -1088,6 +1122,14 @@ state.track = null;
     else closeLightbox();
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', positionOnboard);
+
+  // Kamera überlebt App-Wechsel: Mobile-Browser frieren den getUserMedia-Stream
+  // bei Hintergrundung ein – das Video zeigt dann das eingefrorene letzte Bild,
+  // bis die Seite neu geladen wird. Wenn die App wieder in den Vordergrund
+  // kommt, die Kamera neu beschaffen, damit sie sofort wieder läuft.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.stream) startCamera();
+  });
 
   els.onboardNextBtn.addEventListener('click', () => {
     if (!els.firstNameInput.value.trim()) {

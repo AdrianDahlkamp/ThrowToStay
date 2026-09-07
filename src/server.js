@@ -14,6 +14,9 @@
  *   TTS_DATA_DIR      Datenverzeichnis (Standard ./data)
  *   ADMIN_PASSWORD    Admin-Passwort (Standard "throwtostay-admin" – unbedingt ändern!)
  *   TTS_HTTPS         "1" oder Start-Argument --https für HTTPS
+ *
+ *   WICHTIG: ADMIN_PASSWORD MUSS gesetzt sein (kein Standard-Passwort mehr).
+ *   Ohne die Variable startet der Server NICHT (Fail-Fast).
  */
 
 const path = require('path');
@@ -34,12 +37,21 @@ const { createOrganizerRouter } = require('./routes/organizer');
 const PORT = parseInt(process.env.TTS_PORT, 10) || 3742;
 const DATA_DIR = path.resolve(process.env.TTS_DATA_DIR || path.join(__dirname, '..', 'data'));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'throwtostay-admin';
 const USE_HTTPS = process.env.TTS_HTTPS === '1' || process.argv.includes('--https');
 
+// Sicherheit: kein Standard-Passwort. In Production MUSS ADMIN_PASSWORD explizit
+// gesetzt sein (Systemd-Service, .env oder Export). Sonst startet der Server nicht.
 if (!process.env.ADMIN_PASSWORD) {
-  console.warn('WARNUNG: ADMIN_PASSWORD ist nicht gesetzt – es wird das Standard-Passwort verwendet.');
+  console.error(
+    'FEHLER: Die Umgebungsvariable ADMIN_PASSWORD ist nicht gesetzt.\n'
+    + 'Setze sie auf ein starkes, eindeutiges Passwort, z. B.:\n'
+    + '  export ADMIN_PASSWORD=***\n'
+    + '(Systemd: Environment=ADMIN_PASSWORD=*** / .env-Datei).\n'
+    + 'Ein Standard-Passwort wird aus Sicherheitsgründen NICHT verwendet.'
+  );
+  process.exit(1);
 }
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // ------------------------------------------------------------ Datenbank
 

@@ -122,9 +122,12 @@ async function main() {
   const { event: customEvent } = await createCustomRes.json();
   check('Freigabe-Zeitpunkt aus Body übernommen', customEvent.galleryUnlockAt === customUnlock, customEvent.galleryUnlockAt);
 
-  const qr = await fetch(BASE + `/api/admin/events/${event.id}/qr.png?token=${encodeURIComponent(token)}`);
+  const qr = await fetch(BASE + `/api/admin/events/${event.id}/qr.png`, { headers: auth });
   const qrBuf = Buffer.from(await qr.arrayBuffer());
-  check('QR-Code PNG ausgeliefert', qr.ok && qrBuf.length > 100 && qrBuf[0] === 0x89 && qrBuf[1] === 0x50);
+  check('QR-Code PNG ausgeliefert (Bearer-Header)', qr.ok && qrBuf.length > 100 && qrBuf[0] === 0x89 && qrBuf[1] === 0x50);
+  // Sicherheit: ?token= in der URL wird abgelehnt (Token ausschließlich per Bearer).
+  const qrQuery = await fetch(BASE + `/api/admin/events/${event.id}/qr.png?token=${encodeURIComponent(token)}`);
+  check('?token= in URL abgelehnt (401)', qrQuery.status === 401);
 
   console.log('\n— Event-App: State & Registrierung —');
   const eventPage = await fetch(BASE + `/e/${event.sessionId}`);
@@ -419,8 +422,8 @@ async function main() {
   const orgTryAdmin = await fetch(BASE + '/api/admin/events', { headers: orgAuth });
   check('Veranstalter-Token gilt nicht für Admin-API → 401', orgTryAdmin.status === 401);
 
-  const orgQr = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/qr.png?token=${encodeURIComponent(orgData.token)}`);
-  check('Veranstalter-QR-Code auslieferbar (?token=)', orgQr.ok && (await orgQr.arrayBuffer()).byteLength > 100);
+  const orgQr = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/qr.png`, { headers: orgAuth });
+  check('Veranstalter-QR-Code auslieferbar (Bearer-Header)', orgQr.ok && (await orgQr.arrayBuffer()).byteLength > 100);
 
   const revokeRes = await fetch(BASE + `/api/admin/keys/${accessKey.id}`, {
     method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },

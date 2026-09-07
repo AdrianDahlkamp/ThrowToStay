@@ -6,7 +6,7 @@
  * anlegen und verwalten – ohne Admin-Rechte (keine Key-Verwaltung, keine
  * fremden Events).
  *
- * Auth: Login mit Schlüssel → HMAC-Session-Token (Bearer-Header oder ?token=).
+ * Auth: Login mit Schlüssel → HMAC-Session-Token (nur Bearer-Header, nicht ?token=).
  */
 
 const express = require('express');
@@ -22,10 +22,13 @@ function createOrganizerRouter({ db, dataDir, adminSecret }) {
 
   // ------------------------------------------------------------- Auth
 
+  // Token ausschließlich per Bearer-Header – NICHT per ?token= in der URL
+  // (Token-Leakage via Referer/Logs vermeiden). Der Client nutzt api() mit
+  // Authorization-Header, auch für QR-/ZIP-Downloads (per Blob).
   function tokenFromReq(req) {
     const auth = req.get('authorization') || '';
     if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
-    return req.query.token;
+    return null;
   }
 
   /** Token verifizieren und zugehörigen Key laden (null = ungültig). */

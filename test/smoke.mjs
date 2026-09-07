@@ -95,7 +95,11 @@ async function main() {
   const noAuth = await fetch(BASE + '/api/admin/events');
   check('Admin-API ohne Token → 401', noAuth.status === 401);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Lokales Kalendardatum (die App rechnet in lokaler Zeit, nicht UTC).
+  // Vorher: toISOString().slice(0,10) = UTC-Datum → weicht nahe Mitternacht
+  // (00:00–Offset Uhr) vom lokalen Tag ab und brach den Freigabe-Test.
+  const nowD = new Date();
+  const today = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
   const createRes = await fetch(BASE + '/api/admin/events', {
     method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Testevent', eventDate: today, maxPhotosPerUser: 30 }),

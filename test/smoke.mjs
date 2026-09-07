@@ -286,6 +286,30 @@ async function main() {
   const overflowB = await uploadPhoto(userB, { withFilter: false });
   check('Upload über Limit (User B jetzt 2/2) → 409', overflowB.status === 409);
 
+  // Race-Test: Parallele Uploads desselben Users dürfen das Limit NICHT
+  // überschreiten (Check + Insert sind atomar via BEGIN IMMEDIATE).
+  const raceEvRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Race', eventDate: today, maxPhotosPerUser: 3 }),
+  });
+  const { event: raceEv } = await raceEvRes.json();
+  const raceUser = uuid();
+  await fetch(BASE + `/api/e/${raceEv.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: raceUser, firstName: 'R', lastName: 'ace' }),
+  });
+  const raceUploads = await Promise.all(Array.from({ length: 6 }, async () => {
+    const fd = new FormData();
+    fd.set('uuid', raceUser);
+    fd.set('filterId', 'none');
+    fd.set('takenWithFilter', '0');
+    fd.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+    return fetch(BASE + `/api/e/${raceEv.sessionId}/photos`, { method: 'POST', body: fd });
+  }));
+  const raceAccepted = raceUploads.filter(r => r.status === 201).length;
+  const raceCount = (await (await fetch(`${BASE}/api/e/${raceEv.sessionId}/state?uuid=${raceUser}`)).json()).user.photoCount;
+  check('Parallele Uploads überschreiten das Limit nicht (3/6 akzeptiert)', raceAccepted === 3 && raceCount === 3, `akzeptiert=${raceAccepted}, count=${raceCount}`);
+
   console.log('\n— Galerie-Freigabe & Sammel-Download —');
   const unlock = await fetch(BASE + `/api/admin/events/${event.id}`, {
     method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },

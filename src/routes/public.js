@@ -249,17 +249,38 @@ function createPublicRouter({ db, dataDir }) {
         track(filtered.filename);
       }
 
+      // Atomares Check + Insert: BEGIN IMMEDIATE hält den Schreib-Lock über
+      // den Re-Check UND das Insert, sodass parallele Uploads desselben Users
+      // nacheinander statt überlappend ausgeführt werden (kein Limit-Race).
+      // Der Lock wird NUR hier (kurz, synchron) gehalten – nicht beim Datei-I/O.
       const id = util.generateId();
-      db.prepare(
-        `INSERT INTO photos (id, event_id, user_id, original_file, filtered_file, filter_id, taken_with_filter, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        id, event.id, user.id, original.filename,
-        filtered ? filtered.filename : null,
-        filtered ? filterId : null,
-        takenWithFilter ? 1 : 0,
-        util.nowIso()
-      );
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const c2 = photoCountForUser(user.id);
+        if (c2 >= event.max_photos_per_user) {
+          db.exec('ROLLBACK');
+          return res.status(409).json({ error: `Das Limit von ${event.max_photos_per_user} Fotos ist erreicht.` });
+        }
+        const t2 = db.prepare('SELECT COUNT(*) AS c FROM photos WHERE event_id = ?').get(event.id).c;
+        if (t2 >= MAX_PHOTOS_PER_EVENT) {
+          db.exec('ROLLBACK');
+          return res.status(409).json({ error: 'Das Foto-Limit für dieses Event ist erreicht.' });
+        }
+        db.prepare(
+          `INSERT INTO photos (id, event_id, user_id, original_file, filtered_file, filter_id, taken_with_filter, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          id, event.id, user.id, original.filename,
+          filtered ? filtered.filename : null,
+          filtered ? filterId : null,
+          takenWithFilter ? 1 : 0,
+          util.nowIso()
+        );
+        db.exec('COMMIT');
+      } catch (txErr) {
+        try { db.exec('ROLLBACK'); } catch { /* bereits gerollt */ }
+        throw txErr;
+      }
 
       const photo = db.prepare('SELECT * FROM photos WHERE id = ?').get(id);
       res.status(201).json({

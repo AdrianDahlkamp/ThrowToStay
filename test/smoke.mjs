@@ -150,6 +150,9 @@ async function main() {
   check('Event-URL liefert Kamera-App', eventPage.ok && eventHtml.includes('shutterBtn'));
   check('Onboarding-Wizard vorhanden (Vorname→Nachname)', eventHtml.includes('onboardNextBtn') && eventHtml.includes('onboardBackBtn') && eventHtml.includes('data-step="2"') && eventHtml.includes('joinBtnLabel'));
   check('Onboarding: Einwilligungsschritt + Anonym-Option vorhanden', eventHtml.includes('data-step="0"') && eventHtml.includes('consentChk') && eventHtml.includes('anonymousBtn'));
+  check('Offline-Banner vorhanden (dauerhaft, kein Toast)', eventHtml.includes('offlineBanner'));
+  const eventJs = await (await fetch(BASE + '/js/event.js')).text();
+  check('Fetch-Timeout + Offline-Erkennung (Client)', eventJs.includes('fetchWithTimeout') && eventJs.includes('updateOfflineBanner') && eventJs.includes('navigator.onLine'));
   const csp = String(eventPage.headers.get('content-security-policy') || '');
   check('CSP ohne Google-Fonts (self-hosted)', !csp.includes('googleapis') && !csp.includes('gstatic'));
 

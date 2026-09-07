@@ -55,7 +55,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 | Fehlerbehandlung (Server) | ✅ | JSON-Fehlerhandler (5xx generisch, 4xx kontrolliert), `console.error`. |
 | Datenverlust | ✅ | **Atomare Uploads** (File + DB konsistent, Cleanup bei jedem Fehler) + **Backup** (nightly, DB + Fotos). |
 | Kamera-Fehler | ✅ | Retry-Button, Fehlermeldung. |
-| Netzwerk-Fehler | ⚠️ | Kein Timeout, keine Offline-Erkennung (nur Retry-Banner bei Fehlern). |
+| Netzwerk-Fehler | ✅ | Fetch-Timeout (AbortController: 15 s API / 90 s Upload) + diskrete Offline-Anzeige (dauerhaftes Banner, kein Toast). |
 | Browser | ⚠️ | Kein PWA/Service-Worker; CSP + Permissions-Policy vorhanden. |
 | Konkreuz | ⚠️ | Foto-Limit: Read-then-Insert ohne Lock → bei parallelen Uploads (2 Tabs) mögliches Limit-Überschreiten + Dateiname-Kollision (niedrig, Client serialisiert). |
 | Limits | ✅ | 20 MB/Datei, 2 Dateien, 39/User, 20000/Event. |
@@ -64,7 +64,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 **Stabilitäts-Risiken (priorisiert):**
 1. ✅ **File-Write + DB-Insert atomar machen** (Cleanup bei jedem Fehler + Startup-Orphan-Sweep → kein Datenverlust).
 2. ✅ **Backup** (DB via `VACUUM INTO` + Fotos, nightly per systemd-Timer, Retention 7; lokal, später Cloud).
-3. ⬜ **Timeout + Offline-Erkennung** (Client).
+3. ✅ **Timeout + Offline-Erkennung** (Client: AbortController-Timeout + Offline-Banner).
 4. ✅ **Temp-Dir-Aufräumen** (`data/tmp` beim Start + in-request; periodic optional).
 5. ⬜ **Foto-Limit-Race** (DB-Transaktion/Constraint, oder akzeptieren als niedrig).
 
@@ -129,7 +129,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - ✅ **Atomare Uploads**: Datei + DB konsistent (Cleanup bei jedem Fehler + Startup-Orphan-Sweep → kein Datenverlust).
 - ✅ **Backup**: nightly `data/` (DB via `VACUUM INTO` + Fotos) → **lokal** (anderer Pfad/Disk), Retention 7, systemd-Timer (`scripts/backup.mjs`); später **Cloud** für Production. Restore-Test.
 - ⬜ **HA**: Proxmox-HA für den Server (Infrastruktur-Ebene, eigener Track — nicht App-Backup).
-- ⬜ **Timeout + Offline**: Client (fetch-Timeout, `navigator.onLine`, „offline" Hinweis).
+- ✅ **Timeout + Offline**: Client (fetch-Timeout via AbortController, `navigator.onLine`, dauerhaftes Offline-Banner).
 - ✅ **Temp-Dir-Aufräumen**: `data/tmp` bei Start (Orphan-Sweep) + in-request Cleanup (periodic optional).
 - ⬜ **Foto-Limit-Race**: DB-Constraint/Transaktion (oder als niedrig akzeptieren).
 

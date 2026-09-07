@@ -36,6 +36,7 @@
     flashBtn: $('flashBtn'), flipBtn: $('flipBtn'), shutterBtn: $('shutterBtn'), toGalleryBtn: $('toGalleryBtn'),
     photoCounter: $('photoCounter'),
     retryBanner: $('retryBanner'), retryText: $('retryText'), retryBtn: $('retryBtn'),
+    offlineBanner: $('offlineBanner'),
     galleryHint: $('galleryHint'), selectToggle: $('selectToggle'), lockedBanner: $('lockedBanner'), photoGrid: $('photoGrid'),
     selectBar: $('selectBar'), selectCount: $('selectCount'), selectAllBtn: $('selectAllBtn'), downloadSelBtn: $('downloadSelBtn'),
     lightbox: $('lightbox'), lbImg: $('lbImg'), lbName: $('lbName'), lbClose: $('lbClose'),
@@ -87,8 +88,26 @@
     return u;
   }
 
+  // Fetch mit Timeout (AbortController): verhindert, dass ein hängender Request
+  // den Gast endlos blockiert. Bei Timeout klaren, diskreten Fehler werfen
+  // (wird vom bestehenden Fehler-/Retry-Pfad aufgefangen).
+  async function fetchWithTimeout(path, opts = {}, timeoutMs = 15000) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetch(path, { ...opts, signal: ctrl.signal });
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        throw new Error('Zeitüberschreitung – bitte erneut versuchen.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
   async function api(path, opts) {
-    const res = await fetch(path, opts);
+    const res = await fetchWithTimeout(path, opts, 15000);
     if (!res.ok) {
       let msg = 'Serverfehler (' + res.status + ')';
       try { const j = await res.json(); if (j.error) msg = j.error; } catch { /* ignore */ }
@@ -455,7 +474,7 @@ state.track = null;
       if (thumb) fd.set('original_thumb', thumb, 'original-thumb.jpg');
     }
 
-    const res = await fetch(`/api/e/${SID}/photos`, { method: 'POST', body: fd });
+    const res = await fetchWithTimeout(`/api/e/${SID}/photos`, { method: 'POST', body: fd }, 90000);
     if (!res.ok) {
       let msg = 'Upload fehlgeschlagen';
       try { const j = await res.json(); if (j.error) msg = j.error; } catch { /* ignore */ }
@@ -508,6 +527,23 @@ state.track = null;
     const n = state.failedUploads.length;
     els.retryBanner.classList.toggle('visible', n > 0);
     els.retryText.textContent = n === 1 ? 'Ein Foto konnte nicht hochgeladen werden.' : `${n} Fotos konnten nicht hochgeladen werden.`;
+  }
+
+  // Diskrete Offline-Anzeige: dauerhaftes Banner (kein Toast), reagiert auf
+  // navigator.onLine + online/offline-Ereignisse. Nichts Aufdringliches –
+  // der Gast soll die Party genießen, nicht von Fehlern bombardiert werden.
+  function updateOfflineBanner() {
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    els.offlineBanner.classList.toggle('visible', offline);
+    if (offline) {
+      els.offlineBanner.textContent = '';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      els.offlineBanner.appendChild(dot);
+      els.offlineBanner.appendChild(document.createTextNode(
+        'Offline – Fotos können gerade nicht gesendet werden. Bitte die Verbindung prüfen; gesendete Fotos erscheinen in der Galerie.'
+      ));
+    }
   }
 
   function retryFailed() {
@@ -1101,6 +1137,11 @@ state.track = null;
   // ------------------------------------------------------------- Init
 
   async function init() {
+    // Offline-Erkennung: dauerhaftes, dezentes Banner (kein Toast).
+    window.addEventListener('online', updateOfflineBanner);
+    window.addEventListener('offline', updateOfflineBanner);
+    updateOfflineBanner();
+
     if (!SID) {
       els.eventName.textContent = 'Ungültiger Link';
       return;

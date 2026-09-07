@@ -171,7 +171,9 @@ function createPublicRouter({ db, dataDir }) {
     if (!util.isValidUuid(uuid)) return res.status(400).json({ error: 'Ungültige Nutzer-Kennung.' });
     const first = String(firstName || '').trim().slice(0, 60);
     const last = String(lastName || '').trim().slice(0, 60);
-    if (!first || !last) return res.status(400).json({ error: 'Bitte Vor- und Nachnamen angeben.' });
+    // Name ist optional: Gäste dürfen anonym beitreten (beide Namen leer). Die
+    // Identität bleibt die Browser-UUID (Foto-Limit, eigene Fotos). Anonyme Gäste
+    // erscheinen in der Galerie/Export als „Gast" (Datenminimierung, DSGVO-freundlich).
 
     const existing = getUserByUuid(event.id, uuid);
     if (existing) {

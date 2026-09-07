@@ -81,6 +81,11 @@ function ensureColumns(db) {
   if (!cols.includes('hide_filter_buttons')) {
     db.exec('ALTER TABLE events ADD COLUMN hide_filter_buttons INTEGER NOT NULL DEFAULT 0');
   }
+  // DSGVO-Retention: nach wie vielen TAGEN NACH DEM EVENT-DATUM die Daten
+  // automatisch gelöscht werden (Standard 30). 0 = keine Auto-Löschung.
+  if (!cols.includes('retention_days')) {
+    db.exec('ALTER TABLE events ADD COLUMN retention_days INTEGER NOT NULL DEFAULT 30');
+  }
 }
 
 function openDb(dataDir) {

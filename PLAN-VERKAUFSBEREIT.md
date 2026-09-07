@@ -17,35 +17,35 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 | Rate-Limiting | ✅ | Login-Limiter pro IP (6 Fehlversuche→Block). ⚠️ In-memory (reset bei Neustart). |
 | Input-Validierung | ✅ | Name/Datum/Limits/Qualität alles geclamped, Datum-Regex, UUID-Validierung. |
 | Dateisicherheit | ✅ | Temp-Dir, zufällige Namen, Magic-Bytes (nur JPEG/PNG/WEBP), Path-Traversal-Schutz. |
-| Krypto/Secrets | ✅ | Secret 32 Bytes (0600), HMAC-Tokens mit Expiry. ⚠️ `ADMIN_PASSWORD` hat Default. |
+| Krypto/Secrets | ✅ | Secret 32 Bytes (0600), HMAC-Tokens mit Expiry. `ADMIN_PASSWORD` Fail-Fast (kein Default). |
 | TLS | ✅ | Zoraxy terminiert TLS; `trust proxy` nur für Zoraxy-IP. ⚠️ HSTS nicht gesetzt. |
 | Deps | ✅ | 5 Dependencies, schlank, aktuell (Node 22). |
 | XSS/SQLi/Leak | ✅ | CSP (keine Inline-Scripts), `frame-ancestors 'none'`, Prepared Statements, Fehlerhandler ohne Leaks. |
 
 **Sicherheits-Lücken (priorisiert):**
-1. ⬜ `ADMIN_PASSWORD`-Default `"throwtostay-admin"` → in Production **kein Default**, explizit setzen (Start scheitert sonst).
+1. ✅ `ADMIN_PASSWORD`-Default **entfernt** (Fail-Fast: Server startet ohne die Variable NICHT; `.env` + `.env.example`).
 2. ⬜ **HSTS** auf Zoraxy setzen (prüfen, falls nicht da).
-3. ❓ `?token=` in Query-String (nur für img/QR) → Mini-Leak-Risiko; entweder akzeptieren (gemildert) oder nur Bearer erlauben.
+3. ✅ `?token=` in Query-String **eliminiert** → Bearer-only (Admin + Organizer); neuer Smoke-Test `?token=`→401.
 
 ### 1.2 Datenschutz (DSGVO) — insgesamt **die größte Lücke**
 | Bereich | Status | Anmerkung |
 |---|---|---|
-| Dateninventar | ⚠️ | Vor-/Nachname + **Fotos** (personenbezogen!) + Browser-UUID. |
-| Datenminimierung | ⚠️ | Namen nötig (Galerie-Zuordnung); UUID pseudonymisiert. Fotos werden dauerhaft gespeichert. |
-| Retention | ❌ | **Keine** Auto-Löschung; Daten bleiben ewig (nur manuelle Admin-Löschung). |
-| Recht auf Löschung (Art. 17) | ⚠️ | Nur Admin kann Events (mit Fotos) löschen; Gast kann seine Daten nicht selbst löschen. |
-| Recht auf Auskunft (Art. 15) | ❌ | Kein Gast-Endpoint; nur Admin sieht Teilnehmer. |
-| Einwilligung/Transparenz | ❌ | **Keine Datenschutzerklärung, keine Consent-Box**; beim Beitreten nur Name-Abfrage. |
-| Fotos als Daten | ⚠️ | Gespeichert + geteilt (Galerie ab Freigabe) + downloadbar, **ohne Consent des Abgebildeten**. |
-| Hosting-Standort | ❓ | 10.12.95.137 (LAN, hinter Zoraxy) — EU? zu dokumentieren. |
-| Verarbeitungsdoku | ❌ | Fehlt (nur technische README). |
+| Dateninventar | ✅ | Vor-/Nachname (**optional** = anonym möglich) + **Fotos** (personenbezogen!) + Browser-UUID. |
+| Datenminimierung | ✅ | Name optional (Gäste dürfen **anonym** beitreten); UUID pseudonymisiert; Retention begrenzt die Speicherung. |
+| Retention | ✅ | **Konfigurierbare Auto-Löschung** pro Event (`retention_days`, Default 30; stündlicher Hintergrund-Job, `0` = manuell). |
+| Recht auf Löschung (Art. 17) | 🔶 | **Per E-Mail-Prozess** (Gast → Veranstalter/Admin, manuell + dokumentiert); Veranstalter löscht Events/Fotos. Kein In-App-Endpoint (Schlank-Entscheidung). |
+| Recht auf Auskunft (Art. 15) | 🔶 | **Per E-Mail-Prozess** (dokumentiert in Datenschutzerklärung). Kein In-App-Endpoint (Schlank-Entscheidung). |
+| Einwilligung/Transparenz | ✅ | **Datenschutzerklärung** (`/datenschutz.html`) + **Consent-Schritt** im Onboarding (vor der Kamera); Link in der Box. |
+| Fotos als Daten | ⚠️ | Gespeichert + geteilt (Galerie ab Freigabe) + downloadbar; **Consent des Gastes** jetzt vorhanden (Consent des *Abgebildeten* ist bei Party-Fotos praktisch nicht abbildbar → in Erklärung als „Galerie für alle Gäste" transparent gemacht). |
+| Hosting-Standort | ✅ | EU/Deutschland (10.12.95.137, hinter Zoraxy) — in Datenschutzerklärung dokumentiert. |
+| Verarbeitungsdoku | 🔶 | Datenschutzerklärung deckt Daten/Rechtsgrundlage/Retention/Rechte ab; formelle AVV/TVA optional (je nach Kundengruppe). |
 
 **DSGVO-Lücken (priorisiert):**
-1. ⬜ **Datenschutzerklärung + Einwilligung** (vor der Foto-Aufnahme, im Onboarding).
-2. ⬜ **Retention-Policy** (konfigurierbare Auto-Löschung nach N Tagen/Wochen).
-3. ⬜ **Recht auf Löschung** für den Gast (seine Daten + Fotos selbst löschen können).
-4. ⬜ **Recht auf Auskunft** (Gast sieht, was über ihn gespeichert ist).
-5. ⬜ **Hosting-Standort + Verarbeitungsdokumentation** (EU, Doku).
+1. ✅ **Datenschutzerklärung + Einwilligung** (Consent-Schritt vor der Kamera, Link zur Erklärung).
+2. ✅ **Retention-Policy** (konfigurierbare Auto-Löschung nach N Tagen, pro Event).
+3. 🔶 **Recht auf Löschung** — per E-Mail-Prozess (dokumentiert); kein In-App-Endpoint (Schlank).
+4. 🔶 **Recht auf Auskunft** — per E-Mail-Prozess (dokumentiert); kein In-App-Endpoint (Schlank).
+5. ✅ **Hosting-Standort** (EU) + Transparenz in Datenschutzerklärung.
 
 ### 1.3 Zuverlässigkeit & Stabilität — insgesamt **gut, mit Datenverlust-Risiken**
 | Bereich | Status | Anmerkung |
@@ -116,13 +116,14 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - ⬜ **HSTS** auf **Zoraxy** setzen (Infrastruktur, nicht App): `Strict-Transport-Security: max-age=31536000; includeSubDomains` — nur am TLS-Terminierungspunkt. ❓ prüfen, ob schon da.
 - ⬜ Dependency-Updates: manuell, bei Bedarf (5 Deps). ❓ `npm outdated` hier nicht möglich (npm-Cache read-only) → auf Develop-Server prüfen.
 
-### Phase 2 — Datenschutz (DSGVO, schlank)
-- ⬜ **Datenschutzerklärung**: Text (Hosting-Standort/EU, welche Daten, Retention) + Anzeige im Onboarding **vor der Kamera**.
-- ⬜ **Einwilligung**: Pflicht-Checkbox „Ich stimme zu, dass mein Name und meine Fotos gespeichert werden" vor dem Beitreten.
-- ⬜ **Retention**: konfigurierbare Auto-Löschung (pro Event, z. B. „nach 30 Tagen").
-- ⬜ **Löschung & Auskunft (Art. 15/17)**: **per E-Mail-Prozess** (Gast schreibt Veranstalter/Admin → werden manuell erledigt + in Datenschutzerklärung dokumentiert). Kein In-App-Endpoint.
-- ⬜ **Gast löschet letztes Foto**: ❓ offen — ob der Gast sein **jüngstes** Foto selbst löschen darf (kleiner Button), restliche Löschung bleibt beim Veranstalter.
-- ⬜ **Verarbeitungsdokumentation**: Verarbeitungen erfassen (für AVV/Transparenz).
+### Phase 2 — Datenschutz (DSGVO, schlank) ✅ (Kern fertig)
+- ✅ **Datenschutzerklärung**: `/datenschutz.html` (EU-Standort, welche Daten, Retention, Rechte, Kontakt) + Link im Onboarding.
+- ✅ **Einwilligung**: Consent-Schritt (Schritt 0) im Onboarding **vor** der Kamera; „Weiter" erst nach Haken.
+- ✅ **Anonyme Gäste**: Name optional; „Ohne Namen beitreten"-Button; Anzeige „Gast"; Server akzeptiert leere Namen (Datenminimierung).
+- ✅ **Retention**: `retention_days` pro Event (Default 30, `0` = manuell) + stündlicher Auto-Löschung-Job; Feld im Expert-Panel (Admin + Veranstalter).
+- ✅ **Löschung & Auskunft (Art. 15/17)**: **per E-Mail-Prozess** — in Datenschutzerklärung dokumentiert (Gast → Veranstalter). Kein In-App-Endpoint (Schlank-Entscheidung).
+- ❓ **Gast löschet letztes Foto**: offen — Phase 4 (UX) klären; Standard = Löschung nur Veranstalter.
+- 🔶 **Verarbeitungsdokumentation**: Datenschutzerklärung deckt Kern ab; formelle AVV optional.
 
 ### Phase 3 — Zuverlässigkeit & Stabilität  *(größer Hebel)*
 - ⬜ **Atomare Uploads**: Datei + DB konsistent (keine Orphan-Dateien → kein Datenverlust).

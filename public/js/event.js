@@ -46,6 +46,8 @@
     firstNameInput: $('firstNameInput'), lastNameInput: $('lastNameInput'),
     onboardNextBtn: $('onboardNextBtn'), onboardBackBtn: $('onboardBackBtn'),
     joinBtn: $('joinBtn'), joinBtnLabel: $('joinBtnLabel'), onboardError: $('onboardError'),
+    anonymousBtn: $('anonymousBtn'),
+    consentChk: $('consentChk'), consentNextBtn: $('consentNextBtn'),
     toast: $('toast'),
   };
 
@@ -128,10 +130,12 @@
   function shortName(p) {
     const f = (p.owner.firstName || '').trim();
     const l = (p.owner.lastName || '').trim();
-    return `${f} ${l ? l.charAt(0).toUpperCase() + '.' : ''}`.trim();
+    if (!f && !l) return 'Gast';
+    return `${f} ${l ? l.charAt(0).toUpperCase() + '.' : ''}`.trim() || 'Gast';
   }
   function fullName(p) {
-    return `${p.owner.firstName} ${p.owner.lastName}`.trim();
+    const n = `${p.owner.firstName || ''} ${p.owner.lastName || ''}`.trim();
+    return n || 'Gast';
   }
 
   // ------------------------------------------------------------- Icons
@@ -1024,7 +1028,8 @@ state.track = null;
   function renderHeader() {
     els.eventName.textContent = state.event ? state.event.name : 'Event';
     if (state.user) {
-      els.userLine.textContent = `${state.user.firstName} ${state.user.lastName}`;
+      const n = `${state.user.firstName || ''} ${state.user.lastName || ''}`.trim();
+      els.userLine.textContent = n || 'Gast';
     }
   }
 
@@ -1057,7 +1062,9 @@ state.track = null;
   function showOnboardStep(n, doFocus = true) {
     onboardStep = n;
     els.onboardSteps.forEach(s => { s.style.display = (Number(s.dataset.step) === n) ? '' : 'none'; });
-    if (doFocus) (n === 1 ? els.firstNameInput : els.lastNameInput).focus();
+    // Schritt 0 = Einwilligung (keine Namens-Eingabe, kein Fokus auf Eingabefeld).
+    if (doFocus && n === 1) els.firstNameInput.focus();
+    else if (doFocus && n === 2) els.lastNameInput.focus();
   }
 
   function showOnboard(prefill = false, doFocus = true) {
@@ -1070,7 +1077,9 @@ state.track = null;
     els.joinBtnLabel.textContent = prefill ? 'Speichern' : 'Beitreten';
     els.onboard.style.display = 'flex';
     positionOnboard();
-    showOnboardStep(prefill ? 2 : 1, doFocus);
+    // Neue Gäste starten bei der Einwilligung (Schritt 0); beim Ändern des Namens
+    // (prefill) wurde bereits eingewilligt → direkt zu Schritt 2.
+    showOnboardStep(prefill ? 2 : 0, doFocus);
   }
 
   function hideOnboard() {
@@ -1216,6 +1225,31 @@ state.track = null;
     showOnboardStep(2);
   });
   els.onboardBackBtn.addEventListener('click', () => showOnboardStep(1));
+
+  // Einwilligung: „Weiter" erst nach Haken; dann zum Namens-Schritt.
+  els.consentChk.addEventListener('change', () => {
+    els.consentNextBtn.disabled = !els.consentChk.checked;
+  });
+  els.consentNextBtn.addEventListener('click', () => {
+    if (!els.consentChk.checked) return;
+    els.onboardError.textContent = '';
+    showOnboardStep(1);
+  });
+
+  // Anonym beitreten: kein Name (Datenminimierung). Identität bleibt die Browser-UUID.
+  els.anonymousBtn.addEventListener('click', async () => {
+    els.anonymousBtn.disabled = true;
+    try {
+      await registerUser('', '');
+      hideOnboard();
+      await afterJoin();
+      toast('Willkommen!');
+    } catch (err) {
+      els.onboardError.textContent = err.message;
+    } finally {
+      els.anonymousBtn.disabled = false;
+    }
+  });
 
   els.onboardForm.addEventListener('submit', async ev => {
     ev.preventDefault();

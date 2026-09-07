@@ -103,6 +103,7 @@ async function main() {
   check('Event anlegen OK (201)', createRes.status === 201);
   const { event } = await createRes.json();
   check('Event hat 10-stellige Session-ID', /^[0-9A-HJKMNP-TV-Z]{10}$/.test(event.sessionId), event.sessionId);
+  check('Retention-Default = 30 Tage (DSGVO)', event.retentionDays === 30, String(event.retentionDays));
   const unlockDate = new Date(event.galleryUnlockAt);
   const tomorrow = new Date(Date.now() + 864e5);
   check('Freigabe = Folgetag 08:00 Uhr (lokale Zeit)',
@@ -122,6 +123,20 @@ async function main() {
   const { event: customEvent } = await createCustomRes.json();
   check('Freigabe-Zeitpunkt aus Body übernommen', customEvent.galleryUnlockAt === customUnlock, customEvent.galleryUnlockAt);
 
+  // DSGVO-Retention: explizite Speicherdauer wird beim Anlegen + Ändern übernommen.
+  const createRetRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'RetentionTest', eventDate: today, retentionDays: 14 }),
+  });
+  const { event: retEvent } = await createRetRes.json();
+  check('Retention (14 Tage) beim Anlegen übernommen', createRetRes.status === 201 && retEvent.retentionDays === 14, String(retEvent.retentionDays));
+  const upRet = await fetch(BASE + `/api/admin/events/${retEvent.id}`, {
+    method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ retentionDays: 7 }),
+  });
+  const { event: retEvent2 } = await upRet.json();
+  check('Retention (7 Tage) beim Ändern übernommen', upRet.ok && retEvent2.retentionDays === 7, String(retEvent2.retentionDays));
+
   const qr = await fetch(BASE + `/api/admin/events/${event.id}/qr.png`, { headers: auth });
   const qrBuf = Buffer.from(await qr.arrayBuffer());
   check('QR-Code PNG ausgeliefert (Bearer-Header)', qr.ok && qrBuf.length > 100 && qrBuf[0] === 0x89 && qrBuf[1] === 0x50);
@@ -134,8 +149,14 @@ async function main() {
   const eventHtml = await eventPage.text();
   check('Event-URL liefert Kamera-App', eventPage.ok && eventHtml.includes('shutterBtn'));
   check('Onboarding-Wizard vorhanden (Vorname→Nachname)', eventHtml.includes('onboardNextBtn') && eventHtml.includes('onboardBackBtn') && eventHtml.includes('data-step="2"') && eventHtml.includes('joinBtnLabel'));
+  check('Onboarding: Einwilligungsschritt + Anonym-Option vorhanden', eventHtml.includes('data-step="0"') && eventHtml.includes('consentChk') && eventHtml.includes('anonymousBtn'));
   const csp = String(eventPage.headers.get('content-security-policy') || '');
   check('CSP ohne Google-Fonts (self-hosted)', !csp.includes('googleapis') && !csp.includes('gstatic'));
+
+  // Datenschutzerklärung (DSGVO): erreichbar + enthält die Kernpunkte.
+  const dsPage = await fetch(BASE + '/datenschutz.html');
+  const dsHtml = await dsPage.text();
+  check('Datenschutzerklärung erreichbar (Einwilligung, Retention, Rechte, EU)', dsPage.ok && dsHtml.includes('Einwilligung') && dsHtml.includes('Speicherdauer') && dsHtml.includes('Deine Rechte') && dsHtml.includes('Europäischen Union'));
 
   // Selbst-gehostete Fonts (ersetzen Google Fonts): CSS + woff2-Dateien erreichbar.
   const fontsCss = await fetch(BASE + '/fonts/fonts.css');
@@ -175,6 +196,14 @@ async function main() {
     body: JSON.stringify({ uuid: 'kein-uuid', firstName: 'X', lastName: 'Y' }),
   });
   check('Ungültige UUID → 400', badReg.status === 400);
+
+  // Anonyme Registrierung (kein Name) wird akzeptiert (Datenminimierung, DSGVO).
+  const anonReg = await fetch(BASE + `/api/e/${event.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: uuid(), firstName: '', lastName: '' }),
+  });
+  const anonData = await anonReg.json();
+  check('Anonyme Registrierung (ohne Namen) OK', anonReg.ok && anonData.user.firstName === '' && anonData.user.photoCount === 0);
 
   console.log('\n— Foto-Upload & Varianten —');
   async function uploadPhoto(u, { withFilter }) {

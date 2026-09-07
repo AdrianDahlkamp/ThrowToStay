@@ -333,6 +333,10 @@
     fQuality.querySelector('input').max = '100';
     const fUnlock = mkField('Galerie-Freigabe', 'datetime-local', toLocalInputValue(e.galleryUnlockAt),
       'Zeitpunkt, ab dem alle Gäste die gemeinsame Galerie aller Fotos sehen. Standard: Folgetag um 08:00 Uhr.');
+    const fRetention = mkField('Automatische Löschung nach (Tagen)', 'number', e.retentionDays,
+      'DSGVO: Fotos und Daten werden automatisch N Tage NACH DEM EVENT-DATUM gelöscht. 0 = keine automatische Löschung (manuell). Standard: 30.');
+    fRetention.querySelector('input').min = '0';
+    fRetention.querySelector('input').max = '365';
 
     // Reiner Wegwerfkamera-Modus: Filter-Buttons in der Kamera ausblenden.
     const fHideFilters = document.createElement('div');
@@ -367,7 +371,7 @@
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-stack';
-    expertGrid.append(fLimit, fLimitPresets, fSide, fQuality, fUnlock, fHideFilters);
+    expertGrid.append(fLimit, fLimitPresets, fSide, fQuality, fUnlock, fHideFilters, fRetention);
     panelExpert.appendChild(expertGrid);
 
     const usersBtn = document.createElement('button');
@@ -414,6 +418,7 @@
         maxImageSide: parseInt(val(fSide), 10),
         jpegQuality: parseInt(val(fQuality), 10),
         hideFilterButtons: fHideFiltersCb.checked,
+        retentionDays: parseInt(val(fRetention), 10),
       };
       if (val(fUnlock)) patch.galleryUnlockAt = new Date(val(fUnlock)).toISOString();
       try {

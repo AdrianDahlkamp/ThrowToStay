@@ -125,8 +125,23 @@
     <div class="onboard-card">
       <div class="logo">ThrowToStay</div>
       <h2 id="onboardEventName">Event</h2>
-      <p>Willkommen! Damit deine Fotos zugeordnet werden können, gib bitte deinen Namen ein. Deine Geräte-Kennung wird automatisch im Browser gespeichert.</p>
+      <p>Willkommen! Gib gerne deinen Namen ein, damit deine Fotos in der Galerie zugeordnet werden – oder tritt ganz anonym bei. Deine Geräte-Kennung wird automatisch im Browser gespeichert.</p>
       <form id="onboardForm">
+        <!-- Schritt 0: Einwilligung (DSGVO, vor der Datenverarbeitung) -->
+        <div class="onboard-step" data-step="0">
+          <div class="consent-text">
+            <p>Wir speichern deinen Namen (optional) und deine Fotos, um die Event-Galerie zu erstellen. Ab dem Folgetag sind die Fotos für alle Gäste sichtbar und zum Download verfügbar.</p>
+            <p>Details zu Speicherung, Löschung und deinen Rechten: <a href="/datenschutz.html" target="_blank" rel="noopener">Datenschutzerklärung</a>.</p>
+          </div>
+          <label class="check-line" for="consentChk">
+            <input id="consentChk" type="checkbox">
+            <span>Ich bin einverstanden, dass mein Name (optional) und meine Fotos gespeichert und in der Event-Galerie gezeigt werden.</span>
+          </label>
+          <button class="btn onboard-btn" type="button" id="consentNextBtn" disabled>
+            Weiter
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
         <!-- Schritt 1: Vorname -->
         <div class="onboard-step" data-step="1">
           <div class="field">
@@ -137,6 +152,7 @@
             Weiter
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </button>
+          <button class="btn-link" type="button" id="anonymousBtn">Ohne Namen beitreten</button>
         </div>
         <!-- Schritt 2: Nachname -->
         <div class="onboard-step" data-step="2" style="display:none">

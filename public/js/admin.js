@@ -367,6 +367,17 @@
     hideFiltersCb.checked = !!e.hideFilterButtons;
     fHideFilters.appendChild(hideFiltersCb);
 
+    // DSGVO-Retention: automatische Löschung nach N Tagen nach dem Event-Datum.
+    const fRetention = document.createElement('div');
+    fRetention.className = 'field';
+    fRetention.innerHTML = '<label class="tip" data-tip="DSGVO: Fotos und Daten werden automatisch N Tage NACH DEM EVENT-DATUM gelöscht. 0 = keine automatische Löschung (manuell). Standard: 30.">Automatische Löschung nach (Tagen)</label>';
+    const retentionInput = document.createElement('input');
+    retentionInput.type = 'number';
+    retentionInput.min = '0';
+    retentionInput.max = '365';
+    retentionInput.value = e.retentionDays;
+    fRetention.appendChild(retentionInput);
+
     // Tabs: Basis-Einstellungen / Expert-Einstellungen
     const tabBar = document.createElement('div');
     tabBar.className = 'tabs';
@@ -389,7 +400,7 @@
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-stack';
-    expertGrid.append(fLimit, fSide, fQuality, fUnlock, fHideFilters);
+    expertGrid.append(fLimit, fSide, fQuality, fUnlock, fHideFilters, fRetention);
     panelExpert.appendChild(expertGrid);
 
     const usersBtn = document.createElement('button');
@@ -436,6 +447,7 @@
         maxImageSide: parseInt(sideInput.value, 10),
         jpegQuality: parseInt(qualityInput.value, 10),
         hideFilterButtons: hideFiltersCb.checked,
+        retentionDays: parseInt(retentionInput.value, 10),
       };
       if (unlockInput.value) {
         patch.galleryUnlockAt = new Date(unlockInput.value).toISOString();

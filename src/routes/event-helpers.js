@@ -32,6 +32,7 @@ function eventToJson(e) {
     maxImageSide: e.max_image_side,
     jpegQuality: e.jpeg_quality,
     hideFilterButtons: !!e.hide_filter_buttons,
+    retentionDays: e.retention_days ?? 30,
     galleryUnlockAt: e.gallery_unlock_at,
     galleryUnlocked: Date.now() >= Date.parse(e.gallery_unlock_at),
     createdAt: e.created_at,
@@ -100,12 +101,13 @@ function createEvent(db, body, createdBy = null) {
 
   const { maxImageSide, jpegQuality } = parseImageSettings(body);
   const hideFilterButtons = (body && body.hideFilterButtons) ? 1 : 0;
+  const retentionDays = parseRetentionDays(body);
 
   const id = util.generateId();
   db.prepare(
-    `INSERT INTO events (id, session_id, name, event_date, max_photos_per_user, gallery_unlock_at, created_at, created_by, max_image_side, jpeg_quality, hide_filter_buttons)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, util.generateSessionId(), name, date, maxPhotos, unlockAt, util.nowIso(), createdBy, maxImageSide, jpegQuality, hideFilterButtons);
+    `INSERT INTO events (id, session_id, name, event_date, max_photos_per_user, gallery_unlock_at, created_at, created_by, max_image_side, jpeg_quality, hide_filter_buttons, retention_days)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, util.generateSessionId(), name, date, maxPhotos, unlockAt, util.nowIso(), createdBy, maxImageSide, jpegQuality, hideFilterButtons, retentionDays);
 
   return getEventWithStats(db, id);
 }
@@ -121,6 +123,17 @@ function parseImageSettings(body) {
   jpegQuality = Math.min(Math.max(jpegQuality, 50), 100);
 
   return { maxImageSide, jpegQuality };
+}
+
+/**
+ * DSGVO-Retention validieren: nach wie vielen TAGEN NACH DEM EVENT-DATUM die
+ * Daten automatisch gelöscht werden. 0 = keine Auto-Löschung (manuell).
+ * Standard 30, Obergrenze 365.
+ */
+function parseRetentionDays(body) {
+  let days = parseInt((body || {}).retentionDays, 10);
+  if (!Number.isFinite(days)) days = 30;
+  return Math.min(Math.max(days, 0), 365);
 }
 
 /**
@@ -174,9 +187,14 @@ function updateEventFields(db, e, body) {
     ? (b.hideFilterButtons ? 1 : 0)
     : (e.hide_filter_buttons ? 1 : 0);
 
+  // DSGVO-Retention: nur aktualisieren, wenn explizit angeben (sonst Beibehalten).
+  const retentionDays = b.retentionDays !== undefined
+    ? parseRetentionDays(b)
+    : (e.retention_days ?? 30);
+
   db.prepare(
-    `UPDATE events SET name = ?, event_date = ?, max_photos_per_user = ?, gallery_unlock_at = ?, max_image_side = ?, jpeg_quality = ?, hide_filter_buttons = ? WHERE id = ?`
-  ).run(name, eventDate, maxPhotos, unlockAt, maxImageSide, jpegQuality, hideFilterButtons, e.id);
+    `UPDATE events SET name = ?, event_date = ?, max_photos_per_user = ?, gallery_unlock_at = ?, max_image_side = ?, jpeg_quality = ?, hide_filter_buttons = ?, retention_days = ? WHERE id = ?`
+  ).run(name, eventDate, maxPhotos, unlockAt, maxImageSide, jpegQuality, hideFilterButtons, retentionDays, e.id);
 
   return getEventWithStats(db, e.id);
 }
@@ -201,6 +219,28 @@ async function deleteEventCascade(db, dataDir, e) {
   await fsp.rm(path.join(photosRoot, e.session_id), { recursive: true, force: true }).catch(() => {});
 }
 
+/**
+ * DSGVO-Retention: löscht Events, deren Speicherdauer abgelaufen ist.
+ * Ablaufzeitpunkt = Event-Datum (23:59 Uhr) + retention_days Tage.
+ * Nur Events mit retention_days > 0 (0 = keine Auto-Löschung, manuell).
+ * Gibt die Anzahl automatisch gelöschter Events zurück.
+ */
+async function purgeExpiredEvents(db, dataDir) {
+  const now = Date.now();
+  const rows = db.prepare(
+    'SELECT id, session_id, event_date, retention_days FROM events WHERE retention_days > 0'
+  ).all();
+  let deleted = 0;
+  for (const e of rows) {
+    const expiryMs = Date.parse(e.event_date + 'T23:59:59') + e.retention_days * 86400000;
+    if (now > expiryMs) {
+      await deleteEventCascade(db, dataDir, e);
+      deleted++;
+    }
+  }
+  return deleted;
+}
+
 module.exports = {
   eventToJson,
   getEventWithStats,
@@ -209,4 +249,5 @@ module.exports = {
   updateEventFields,
   deleteEventCascade,
   parseImageSettings,
+  purgeExpiredEvents,
 };

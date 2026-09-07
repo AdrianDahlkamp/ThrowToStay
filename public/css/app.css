@@ -62,6 +62,21 @@ h1, h2, h3 { font-weight: 700; }
 }
 .btn.danger { background: var(--danger); }
 .btn.small { padding: 8px 14px; font-size: 13px; }
+.btn-link {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--text-dim, var(--text));
+  font-size: 13.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.btn-link:hover { opacity: 1; }
 
 /* Kleine runde Buttons (Filter-Umschaltung, Download, Auswahl) */
 .rbtn {
@@ -733,6 +748,9 @@ body.event-page {
 .onboard-card h2 { margin: 4px 0 6px; font-size: 20px; }
 .onboard-card p { color: var(--text-dim); font-size: 14px; margin: 0 0 18px; }
 .onboard-card .error { color: var(--danger); font-size: 13.5px; min-height: 18px; margin: 6px 0 0; }
+.onboard-card .consent-text { margin-bottom: 16px; font-size: 13.5px; line-height: 1.5; }
+.onboard-card .consent-text p { margin: 0 0 8px; font-size: 13.5px; }
+.onboard-card .consent-text a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 /* Onboarding als 2-Schritte-Wizard (ein Feld pro Schritt → Tastatur schiebt nichts weg) */
 .onboard-card .onboard-btn { width: 100%; }
 .onboard-card .onboard-btn svg { width: 20px; height: 20px; flex-shrink: 0; }

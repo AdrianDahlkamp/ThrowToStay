@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "start:https": "node src/server.js --https",
     "test": "node test/smoke.mjs",
+    "test:restore": "node test/restore.mjs",
     "backup": "node scripts/backup.mjs"
   },
   "keywords": [

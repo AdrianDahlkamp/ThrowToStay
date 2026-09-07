@@ -199,6 +199,29 @@ function updateEventFields(db, e, body) {
   return getEventWithStats(db, e.id);
 }
 
+/** Thumbnail-Namen aus dem Vollbild-Namen ableiten (Konvention, kein DB-Feld). */
+function thumbName(file) {
+  if (!file) return null;
+  const dot = file.lastIndexOf('.');
+  return dot > 0 ? file.slice(0, dot) + '-thumb' + file.slice(dot) : file + '-thumb.jpg';
+}
+
+/** Alle Dateinamen eines Fotos: Original + Thumb + Filter + Filter-Thumb. */
+function photoFileNames(photo) {
+  return [photo.original_file, thumbName(photo.original_file), photo.filtered_file, thumbName(photo.filtered_file)]
+    .filter(Boolean);
+}
+
+/** Löscht alle Dateien eines Fotos (Original/Thumb/Filter/Filter-Thumb) vom Datenträger. */
+async function deletePhotoFiles(dataDir, sessionId, uuid, photo) {
+  const dir = path.join(dataDir, 'photos', sessionId, uuid);
+  for (const f of photoFileNames(photo)) {
+    if (util.isSafeStoredFilename(f)) {
+      await fsp.unlink(path.join(dir, f)).catch(() => {});
+    }
+  }
+}
+
 /** Event samt Fotos/Dateien löschen (Users/Photos via CASCADE). */
 async function deleteEventCascade(db, dataDir, e) {
   const files = db.prepare(
@@ -297,6 +320,8 @@ module.exports = {
   createEvent,
   updateEventFields,
   deleteEventCascade,
+  deletePhotoFiles,
+  thumbName,
   parseImageSettings,
   purgeExpiredEvents,
   sweepOrphans,

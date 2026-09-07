@@ -504,6 +504,32 @@ async function main() {
   const orgQr = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/qr.png`, { headers: orgAuth });
   check('Veranstalter-QR-Code auslieferbar (Bearer-Header)', orgQr.ok && (await orgQr.arrayBuffer()).byteLength > 100);
 
+  // Foto-Löschung (nur Veranstalter): Gast lädt hoch, Veranstalter listet + löscht.
+  const orgPhotoUser = uuid();
+  await fetch(BASE + `/api/e/${orgEvent.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: orgPhotoUser, firstName: 'Or', lastName: 'G' }),
+  });
+  const orgFd = new FormData();
+  orgFd.set('uuid', orgPhotoUser);
+  orgFd.set('filterId', 'none');
+  orgFd.set('takenWithFilter', '0');
+  orgFd.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+  const orgUp = await fetch(BASE + `/api/e/${orgEvent.sessionId}/photos`, { method: 'POST', body: orgFd });
+  check('Setup: Gast lädt Foto ins Org-Event (201)', orgUp.status === 201);
+  const orgPhotos = await (await fetch(BASE + `/api/organizer/events/${orgEvent.id}/photos`, { headers: orgAuth })).json();
+  check('Veranstalter listet Fotos (1)', orgPhotos.photos.length === 1 && !!orgPhotos.photos[0].thumbUrl, `n=${orgPhotos.photos.length}`);
+  if (orgPhotos.photos[0]) {
+    const orgThumb = await fetch(BASE + orgPhotos.photos[0].thumbUrl, { headers: orgAuth });
+    check('Veranstalter-Thumbnail auslieferbar (Bearer)', orgThumb.ok && (await orgThumb.arrayBuffer()).byteLength > 50);
+    const orgDel = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/photos/${orgPhotos.photos[0].id}`, { method: 'DELETE', headers: orgAuth });
+    check('Veranstalter löscht Foto (200)', orgDel.status === 200);
+  }
+  const orgPhotosAfter = await (await fetch(BASE + `/api/organizer/events/${orgEvent.id}/photos`, { headers: orgAuth })).json();
+  check('Foto nach Löschung weg (0)', orgPhotosAfter.photos.length === 0, `n=${orgPhotosAfter.photos.length}`);
+  const orgFilesLeft = (() => { try { return readdirSync(path.join(DATA_DIR, 'photos', orgEvent.sessionId, orgPhotoUser)).length; } catch { return 0; } })();
+  check('Foto-Datei vom Datenträger entfernt', orgFilesLeft === 0, `übrig: ${orgFilesLeft}`);
+
   const revokeRes = await fetch(BASE + `/api/admin/keys/${accessKey.id}`, {
     method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
     body: JSON.stringify({ revoked: true }),

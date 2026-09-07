@@ -106,6 +106,67 @@
     });
   }
 
+  // Wie askConfirm, aber zusätzlich: Der Bestätigen-Button wird erst aktiv,
+  // wenn das geforderte Wort (z. B. der Event-Name) eingegeben wurde.
+  // Guardrail für finale, unwiderrufliche Aktionen (Event-Löschung) – idiotensicher.
+  function askConfirmType(title, message, requiredWord, confirmLabel = 'Löschen') {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      const card = document.createElement('div');
+      card.className = 'confirm-card';
+      const t = document.createElement('div');
+      t.className = 'confirm-title';
+      t.textContent = title;
+      const m = document.createElement('div');
+      m.className = 'confirm-msg';
+      m.textContent = message;
+      const hint = document.createElement('div');
+      hint.className = 'confirm-typehint';
+      hint.textContent = `Zum Bestätigen „${requiredWord}" eintragen:`;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'confirm-typeinput';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.placeholder = requiredWord;
+      const actions = document.createElement('div');
+      actions.className = 'confirm-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn small secondary';
+      cancel.textContent = 'Abbrechen';
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn small danger';
+      ok.textContent = confirmLabel;
+      ok.disabled = true;
+      let finished = false;
+      const done = v => {
+        if (finished) return;
+        finished = true;
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(v);
+      };
+      const matches = () => input.value.trim().toLowerCase() === String(requiredWord).trim().toLowerCase();
+      const onKey = ev => {
+        if (ev.key === 'Escape') done(false);
+        if (ev.key === 'Enter' && matches()) done(true);
+      };
+      input.addEventListener('input', () => { ok.disabled = !matches(); });
+      cancel.addEventListener('click', () => done(false));
+      ok.addEventListener('click', () => { if (matches()) done(true); });
+      overlay.addEventListener('click', ev => { if (ev.target === overlay) done(false); });
+      card.append(t, m, hint, input, actions);
+      actions.append(cancel, ok);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      document.addEventListener('keydown', onKey);
+      input.focus();
+    });
+  }
+
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString('de-DE', {
       weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -225,7 +286,12 @@
     delBtn.title = 'Event löschen';
     delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
-      if (!(await askConfirm('Event löschen', `Event "${e.name}" inkl. aller Fotos wirklich löschen?`))) return;
+      const ok2 = await askConfirmType(
+        'Event endgültig löschen',
+        `Event "${e.name}" inkl. aller ${e.photoCount} Fotos und Daten unwiderruflich löschen?`,
+        e.name
+      );
+      if (!ok2) return;
       try {
         await api('/events/' + e.id, { method: 'DELETE' });
         toast('Event gelöscht.');

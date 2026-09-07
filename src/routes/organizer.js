@@ -11,10 +11,15 @@
 
 const express = require('express');
 const path = require('path');
+const fsp = require('fs/promises');
 const QRCode = require('qrcode');
 const archiver = require('archiver');
+const sharp = require('sharp');
 const util = require('../util');
 const helpers = require('./event-helpers');
+
+const THUMB_MAX_SIDE = 512; // Kantenlänge für Raster-Thumbnails (Parität mit der App)
+const THUMB_QUALITY = 72;
 
 function createOrganizerRouter({ db, dataDir, adminSecret }) {
   const router = express.Router();
@@ -141,6 +146,73 @@ function createOrganizerRouter({ db, dataDir, adminSecret }) {
         registeredAt: r.created_at,
       })),
     });
+  });
+
+  // ------------------------------------------------------------- Fotos (Verwaltung)
+  // Foto-Löschung ist ausschließlich dem Veranstalter vorbehalten (Entscheidung:
+  // „nur Veranstalter löscht Fotos"). Gäste haben keinen Lösch-Endpunkt.
+
+  router.get('/events/:id/photos', (req, res) => {
+    const e = ownEvent(req);
+    if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
+    const rows = db.prepare(
+      `SELECT p.id, p.created_at, p.filtered_file, u.first_name, u.last_name
+       FROM photos p JOIN users u ON u.id = p.user_id
+       WHERE p.event_id = ? ORDER BY p.created_at DESC LIMIT 500`
+    ).all(e.id);
+    res.json({
+      photos: rows.map(r => ({
+        id: r.id,
+        createdAt: r.created_at,
+        hasFiltered: !!r.filtered_file,
+        owner: `${r.first_name} ${r.last_name}`.trim() || 'Gast',
+        thumbUrl: `/api/organizer/events/${e.id}/photos/${r.id}/thumb`,
+      })),
+    });
+  });
+
+  router.get('/events/:id/photos/:photoId/thumb', async (req, res, next) => {
+    try {
+      const e = ownEvent(req);
+      if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
+      const photo = db.prepare('SELECT * FROM photos WHERE id = ? AND event_id = ?').get(req.params.photoId, e.id);
+      if (!photo) return res.status(404).json({ error: 'Foto nicht gefunden.' });
+      if (!util.isSafeStoredFilename(photo.original_file)) return res.status(404).json({ error: 'Diese Variante existiert nicht.' });
+      const owner = db.prepare('SELECT * FROM users WHERE id = ?').get(photo.user_id);
+      const dir = path.join(photosRoot, e.session_id, owner.uuid);
+      const full = path.join(dir, photo.original_file);
+      const thumb = path.join(dir, helpers.thumbName(photo.original_file));
+      const hasThumb = await fsp.access(thumb).then(() => true, () => false);
+      let filePath = hasThumb ? thumb : full;
+      if (!hasThumb) {
+        try {
+          await sharp(full)
+            .resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: THUMB_QUALITY })
+            .toFile(thumb);
+          filePath = thumb;
+        } catch (err) { /* Fallback: Vollbild ausliefern */ }
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.sendFile(filePath);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/events/:id/photos/:photoId', async (req, res, next) => {
+    try {
+      const e = ownEvent(req);
+      if (!e) return res.status(404).json({ error: 'Event nicht gefunden.' });
+      const photo = db.prepare('SELECT * FROM photos WHERE id = ? AND event_id = ?').get(req.params.photoId, e.id);
+      if (!photo) return res.status(404).json({ error: 'Foto nicht gefunden.' });
+      const owner = db.prepare('SELECT * FROM users WHERE id = ?').get(photo.user_id);
+      db.prepare('DELETE FROM photos WHERE id = ?').run(photo.id);
+      await helpers.deletePhotoFiles(dataDir, e.session_id, owner.uuid, photo);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
   });
 
   router.get('/events/:id/qr.png', async (req, res, next) => {

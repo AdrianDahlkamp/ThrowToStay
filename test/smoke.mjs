@@ -389,6 +389,29 @@ async function main() {
   const exportBuf = Buffer.from(await exportRes.arrayBuffer());
   check('Admin-Export ZIP OK (Fotos + manifest + users)', exportRes.ok && countZipEntries(exportBuf) >= 5, `gefunden: ${countZipEntries(exportBuf)}`);
 
+  console.log('\n— Datenkonsistenz (saubere Datei-Struktur, keine Orphans) —');
+  const consEventRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Konsistenz', eventDate: today }),
+  });
+  const { event: consEvent } = await consEventRes.json();
+  const consUser = uuid();
+  await fetch(BASE + `/api/e/${consEvent.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: consUser, firstName: 'Kons', lastName: 'istenz' }),
+  });
+  const consFd = new FormData();
+  consFd.set('uuid', consUser);
+  consFd.set('filterId', 'none');
+  consFd.set('takenWithFilter', '0');
+  consFd.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+  const consUp = await fetch(BASE + `/api/e/${consEvent.sessionId}/photos`, { method: 'POST', body: consFd });
+  check('Upload OK (Konsistenz-Event)', consUp.status === 201);
+  const consUserDir = path.join(DATA_DIR, 'photos', consEvent.sessionId, consUser);
+  const consFiles = (() => { try { return readdirSync(consUserDir); } catch { return []; } })();
+  // Ohne mitgesendeten Filter/Thumb: genau EINE Datei (das Original), nichts Halbfertiges.
+  check('Sauberer Datei-Satz (1 Original, keine Orphans)', consFiles.length === 1 && consFiles[0].includes('-original.'), consFiles.join(', '));
+
   console.log('\n— Bildkomprimierung konfigurierbar (Issue 1) —');
   const patchImg = await fetch(BASE + `/api/admin/events/${event.id}`, {
     method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },

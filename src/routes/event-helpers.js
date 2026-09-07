@@ -241,6 +241,55 @@ async function purgeExpiredEvents(db, dataDir) {
   return deleted;
 }
 
+/**
+ * Datenkonsistenz beim Start: entfernt „verwaiste" Dateien, die durch einen
+ * Crash (z. B. zwischen Datei-Write und DB-Insert) ohne DB-Zeile zurückbleiben.
+ *  1) data/tmp: komplett leeren (nur transient; Reste = abgebrochene Uploads).
+ *  2) data/photos: Dateien löschen, die keine zugehörige DB-Zeile haben
+ *     (Thumbnails werden per Konvention aus original_file abgeleitet).
+ * Läuft NUR beim Start (bevor der Server Requests annimmt) → keine Race-Kondition
+ * mit laufenden Uploads. Gibt die Anzahl gelöschter Orphan-Dateien zurück.
+ */
+async function sweepOrphans(db, dataDir) {
+  const photosRoot = path.join(dataDir, 'photos');
+  const tmpDir = path.join(dataDir, 'tmp');
+
+  // 1) data/tmp leeren.
+  try {
+    for (const f of await fsp.readdir(tmpDir)) await fsp.unlink(path.join(tmpDir, f)).catch(() => {});
+  } catch { /* tmp-Dir fehlt – egal */ }
+
+  // 2) Bekannte Dateinamen aus der DB (original + filtered) ableiten.
+  const known = new Set();
+  for (const r of db.prepare('SELECT original_file, filtered_file FROM photos').all()) {
+    if (r.original_file) known.add(r.original_file);
+    if (r.filtered_file) known.add(r.filtered_file);
+  }
+  // Thumbnails: Konvention "…-original.jpg" -> "…-original-thumb.jpg".
+  for (const f of [...known]) {
+    const dot = f.lastIndexOf('.');
+    if (dot > 0) known.add(f.slice(0, dot) + '-thumb' + f.slice(dot));
+  }
+
+  let removed = 0;
+  let sessions = [];
+  try { sessions = await fsp.readdir(photosRoot); } catch { return removed; }
+  for (const session of sessions) {
+    let uuidDirs = [];
+    try { uuidDirs = await fsp.readdir(path.join(photosRoot, session)); } catch { continue; }
+    for (const udir of uuidDirs) {
+      let files = [];
+      try { files = await fsp.readdir(path.join(photosRoot, session, udir)); } catch { continue; }
+      for (const f of files) {
+        if (known.has(f)) continue;
+        await fsp.unlink(path.join(photosRoot, session, udir, f)).catch(() => {});
+        removed++;
+      }
+    }
+  }
+  return removed;
+}
+
 module.exports = {
   eventToJson,
   getEventWithStats,
@@ -250,4 +299,5 @@ module.exports = {
   deleteEventCascade,
   parseImageSettings,
   purgeExpiredEvents,
+  sweepOrphans,
 };

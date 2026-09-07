@@ -31,7 +31,7 @@ const util = require('./util');
 const { createPublicRouter } = require('./routes/public');
 const { createAdminRouter } = require('./routes/admin');
 const { createOrganizerRouter } = require('./routes/organizer');
-const { purgeExpiredEvents } = require('./routes/event-helpers');
+const { purgeExpiredEvents, sweepOrphans } = require('./routes/event-helpers');
 
 // ------------------------------------------------------------ Konfiguration
 
@@ -182,6 +182,12 @@ purgeTimer.unref();
 purgeExpiredEvents(db, DATA_DIR)
   .then(n => { if (n > 0) console.log(`Retention: ${n} Event(s) beim Start automatisch gelöscht.`); })
   .catch(err => console.error('Retention-Job (Start) fehlgeschlagen:', err.message));
+
+// Datenkonsistenz beim Start: verwaiste Dateien (z. B. nach einem Crash)
+// entfernen, bevor der Server Requests annimmt (keine Race-Kondition).
+sweepOrphans(db, DATA_DIR)
+  .then(n => { if (n > 0) console.log(`Konsistenz: ${n} verwaiste Datei(en) beim Start entfernt.`); })
+  .catch(err => console.error('Konsistenz-Sweep (Start) fehlgeschlagen:', err.message));
 
 // ------------------------------------------------------------ Start
 

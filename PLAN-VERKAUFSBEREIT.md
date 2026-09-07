@@ -74,18 +74,18 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 | Onboarding | ✅ | Name-Abfrage (Vor-/Nachname), klar. |
 | Feedback | ✅ | Toasts, Foto-Counter, Retry-Banner, Shutter-Animation. |
 | Fehlermeldungen | ✅ | Gast-freundlich, kein Tech-Jargon. |
-| Idiotensicher/Guardrails | ⚠️ | Event-/Foto-Löschung: Confirm vorhanden, aber **kein Undo**; Löschung mit Fotos ist final. |
-| Responsive | ⚠️ | Mobile-first, aber nur **2 Breakpoints** (700/720px); Touch-Targets teils < 44px. |
+| Idiotensicher/Guardrails | ✅ | Event-Löschung per **Wort-Eingabe** (Name eintippen); Foto-Löschung nur Veranstalter (Foto-Verwaltung). Löschung mit Fotos bleibt final (bewusst). |
+| Responsive | ✅ | Mobile-first, Breakpoints 700/720px; Touch-Targets ≥ 44px (`.btn`, Mobile: kleine Buttons + Filter-Toggles). |
 | Performance | ✅ | Raster-Thumbnails (512px), Caching (Fotos), `100dvh`. |
-| Barrierefreiheit | ⚠️ | event.html gut (13 aria/role/alt); admin/organizer dünn (je 1). |
+| Barrierefreiheit | ✅ | event.html gut (13 aria/role/alt); admin/organizer: `:focus-visible`, `aria-label` auf icon-only Buttons, Toast `aria-live`. |
 | Sprache/Konsistenz | ✅ | **Kein „Fotobox"** im Code (Regel eingehalten). |
 | Organizer/Admin-UX | ✅ | Wizard (5 Schritte), klare Schritte. |
 
 **UX-Lücken (priorisiert):**
-1. ⬜ **Guardrails**: Event-Löschung (Bestätigung per Wort-Eingabe, da Fotos final gelöscht werden); Undo wo möglich.
-2. ⬜ **Responsive**: Touch-Targets ≥ 44px, Tablet-Breakpoint ergänzen.
-3. ⬜ **A11y**: aria/role in admin/organizer ergänzen.
-4. ⬜ **Klareres Feedback** nach erfolgreichem Upload („Foto gespeichert").
+1. ✅ **Guardrails**: Event-Löschung per Wort-Eingabe (Admin+Organizer); Foto-Löschung nur Veranstalter (Foto-Verwaltung).
+2. ✅ **Responsive**: Touch-Targets ≥ 44px; Tablet-Breakpoints vorhanden.
+3. ✅ **A11y**: `:focus-visible`, `aria-label` (icon-only Buttons), Toast `aria-live` in admin/organizer.
+4. ✅ **Klareres Feedback**: „Foto gespeichert" nach erfolgreichem Upload (dezent, ein Toast pro Foto).
 
 ---
 
@@ -133,11 +133,11 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - ✅ **Temp-Dir-Aufräumen**: `data/tmp` bei Start (Orphan-Sweep) + in-request Cleanup (periodic optional).
 - ✅ **Foto-Limit-Race**: Check + Insert atomar via `BEGIN IMMEDIATE` (parallele Uploads überschreiten das Limit nicht).
 
-### Phase 4 — UX & Idiotensicher
-- ⬜ **Guardrails**: Event-Löschung per Wort-Eingabe („EVENT" tippen), da Fotos final; Foto-Löschung nur Veranstalter (Gast max. letztes Foto, s. o.).
-- ⬜ **Klareres Feedback**: „Foto gespeichert" nach erfolgreichem Upload.
-- ⬜ **Responsive**: Touch-Targets ≥ 44px, Tablet-Breakpoint (~768/1024px).
-- ⬜ **A11y**: aria/role/fokus-States in admin/organizer ergänzen.
+### Phase 4 — UX & Idiotensicher ✅
+- ✅ **Guardrails**: Event-Löschung per Wort-Eingabe (Event-Name eintippen, Button erst dann aktiv) in Admin **und** Veranstalter; Foto-Löschung **nur Veranstalter** (neue Foto-Verwaltung im Organizer: Grid mit Lazy-Thumbnail, Lösch-Button, Bearer-Endpoint).
+- ✅ **Klareres Feedback**: dezent „Foto gespeichert" nach erfolgreichem Upload (ein kurzes Toast pro Foto, sequenziell – kein Bombardement; Fehler laufen still über den Retry-Banner).
+- ✅ **Responsive**: Touch-Targets ≥ 44px (`.btn` min-height 44px; auf Mobile `.btn.small` + Filter-Toggles auf 44px); Tablet-Breakpoints (700/720px) vorhanden.
+- ✅ **A11y**: globaler `:focus-visible`-Outline (Tastatur), `aria-label` auf icon-only Buttons (Admin+Organizer), Toast `role="status" aria-live="polite"`, `aria-label` auf Bestätigungs-Eingabe.
 
 ### Phase 5 — Finale Abnahme
 - ⬜ **Checkliste** durchgehen (alle Punkte dieser Datei ✅).

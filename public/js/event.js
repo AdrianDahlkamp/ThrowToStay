@@ -454,10 +454,18 @@ state.track = null;
   }
 
   function queueUpload(item) {
-    state.uploadChain = state.uploadChain.then(() => sendUpload(item)).catch(() => {
-      state.failedUploads.push(item);
-      updateRetryBanner();
-    });
+    state.uploadChain = state.uploadChain
+      .then(() => sendUpload(item))
+      .then(() => {
+        // Diskretes Erfolgs-Feedback: genau ein kurzes Toast pro erfolgreichem
+        // Upload (sequenziell, kein Bombardement). Fehler laufen still über
+        // den Retry-Banner (siehe .catch) – "sorglose Party".
+        toast('Foto gespeichert');
+      })
+      .catch(() => {
+        state.failedUploads.push(item);
+        updateRetryBanner();
+      });
   }
 
   async function sendUpload(item) {

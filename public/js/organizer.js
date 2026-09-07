@@ -124,6 +124,7 @@
       input.autocomplete = 'off';
       input.spellcheck = false;
       input.placeholder = requiredWord;
+      input.setAttribute('aria-label', 'Zur Bestätigung den Event-Namen eintippen');
       const actions = document.createElement('div');
       actions.className = 'confirm-actions';
       const cancel = document.createElement('button');
@@ -282,6 +283,7 @@
     delBtn.className = 'btn small danger icon-btn';
     delBtn.type = 'button';
     delBtn.title = 'Event löschen';
+    delBtn.setAttribute('aria-label', 'Event löschen');
     delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
       const ok2 = await askConfirmType(
@@ -330,6 +332,7 @@
     copyBtn.className = 'btn small secondary icon-btn';
     copyBtn.type = 'button';
     copyBtn.title = 'Event-URL kopieren';
+    copyBtn.setAttribute('aria-label', 'Event-URL kopieren');
     copyBtn.appendChild(iconSvg('copy'));
     copyBtn.addEventListener('click', async () => {
       try {
@@ -349,6 +352,7 @@
     dlQr.type = 'button';
     dlQr.style.marginTop = '10px';
     dlQr.title = 'QR-Code herunterladen (PNG)';
+    dlQr.setAttribute('aria-label', 'QR-Code herunterladen');
     dlQr.appendChild(iconSvg('download'));
     dlQr.addEventListener('click', async () => {
       const blob = await api(`/events/${e.id}/qr.png`);
@@ -625,6 +629,7 @@
       del.className = 'btn small danger icon-btn photo-del';
       del.type = 'button';
       del.title = 'Foto löschen';
+      del.setAttribute('aria-label', `Foto von ${p.owner} löschen`);
       del.appendChild(iconSvg('trash'));
       del.addEventListener('click', async () => {
         if (!(await askConfirm('Foto löschen', `Foto von ${p.owner} (${fmtDateTime(p.createdAt)}) wirklich löschen?`))) return;

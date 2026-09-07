@@ -53,19 +53,19 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 | Upload-Pipeline (Client) | ✅ | Queue serialisiert Uploads, Retry-Banner, Filter-Variante best-effort im Hintergrund. |
 | Fehlerbehandlung (Client) | ✅ | Diskrete Toasts, Retry-Banner, Kamera-Retry-Button. |
 | Fehlerbehandlung (Server) | ✅ | JSON-Fehlerhandler (5xx generisch, 4xx kontrolliert), `console.error`. |
-| Datenverlust | ⚠️ | **File-Write + DB-Insert nicht atomar** (Orphan-Dateien). **Kein Backup**. |
+| Datenverlust | ✅ | **Atomare Uploads** (File + DB konsistent, Cleanup bei jedem Fehler) + **Backup** (nightly, DB + Fotos). |
 | Kamera-Fehler | ✅ | Retry-Button, Fehlermeldung. |
 | Netzwerk-Fehler | ⚠️ | Kein Timeout, keine Offline-Erkennung (nur Retry-Banner bei Fehlern). |
 | Browser | ⚠️ | Kein PWA/Service-Worker; CSP + Permissions-Policy vorhanden. |
 | Konkreuz | ⚠️ | Foto-Limit: Read-then-Insert ohne Lock → bei parallelen Uploads (2 Tabs) mögliches Limit-Überschreiten + Dateiname-Kollision (niedrig, Client serialisiert). |
 | Limits | ✅ | 20 MB/Datei, 2 Dateien, 39/User, 20000/Event. |
-| Temp-Dir | ⚠️ | `data/tmp` wird nicht aufgeräumt → akkumuliert bei abgebrochenen Uploads. |
+| Temp-Dir | ✅ | `data/tmp` wird beim Start geleert (Orphan-Sweep) + bei jedem Fehl-Upload (in-request Cleanup). |
 
 **Stabilitäts-Risiken (priorisiert):**
-1. ⬜ **File-Write + DB-Insert atomar machen** (kein Orphan-Risiko → kein Datenverlust).
-2. ⬜ **Backup** (DB + Fotos, regelmäßig, z. B. nightly).
+1. ✅ **File-Write + DB-Insert atomar machen** (Cleanup bei jedem Fehler + Startup-Orphan-Sweep → kein Datenverlust).
+2. ✅ **Backup** (DB via `VACUUM INTO` + Fotos, nightly per systemd-Timer, Retention 7; lokal, später Cloud).
 3. ⬜ **Timeout + Offline-Erkennung** (Client).
-4. ⬜ **Temp-Dir-Aufräumen** (`data/tmp`, z. B. bei Start + periodic).
+4. ✅ **Temp-Dir-Aufräumen** (`data/tmp` beim Start + in-request; periodic optional).
 5. ⬜ **Foto-Limit-Race** (DB-Transaktion/Constraint, oder akzeptieren als niedrig).
 
 ### 1.4 UX, Responsive & Idiotensicher — insgesamt **gut**
@@ -126,11 +126,11 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - 🔶 **Verarbeitungsdokumentation**: Datenschutzerklärung deckt Kern ab; formelle AVV optional.
 
 ### Phase 3 — Zuverlässigkeit & Stabilität  *(größer Hebel)*
-- ⬜ **Atomare Uploads**: Datei + DB konsistent (keine Orphan-Dateien → kein Datenverlust).
-- ⬜ **Backup**: nightly `data/` (DB + Fotos) → **lokal** (anderer Pfad/Disk); später **Cloud** für Production. Restore-Test.
+- ✅ **Atomare Uploads**: Datei + DB konsistent (Cleanup bei jedem Fehler + Startup-Orphan-Sweep → kein Datenverlust).
+- ✅ **Backup**: nightly `data/` (DB via `VACUUM INTO` + Fotos) → **lokal** (anderer Pfad/Disk), Retention 7, systemd-Timer (`scripts/backup.mjs`); später **Cloud** für Production. Restore-Test.
 - ⬜ **HA**: Proxmox-HA für den Server (Infrastruktur-Ebene, eigener Track — nicht App-Backup).
 - ⬜ **Timeout + Offline**: Client (fetch-Timeout, `navigator.onLine`, „offline" Hinweis).
-- ⬜ **Temp-Dir-Aufräumen**: `data/tmp` bei Start + periodic.
+- ✅ **Temp-Dir-Aufräumen**: `data/tmp` bei Start (Orphan-Sweep) + in-request Cleanup (periodic optional).
 - ⬜ **Foto-Limit-Race**: DB-Constraint/Transaktion (oder als niedrig akzeptieren).
 
 ### Phase 4 — UX & Idiotensicher

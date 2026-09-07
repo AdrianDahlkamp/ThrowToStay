@@ -1,0 +1,13 @@
+[Unit]
+Description=ThrowToStay Backup (täglich)
+
+[Timer]
+# Täglich; Persistent=true → ein verpasster Lauf (z. B. Server aus) holt
+# sich beim nächsten Start nach. RandomizedDelaySec streut die Last.
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15m
+AccuracySec=15m
+
+[Install]
+WantedBy=timers.target

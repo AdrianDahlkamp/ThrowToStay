@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "start:https": "node src/server.js --https",
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs",
+    "backup": "node scripts/backup.mjs"
   },
   "keywords": [
     "event",

@@ -5,7 +5,7 @@
  * Ausführen: npm test
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { rmSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -490,6 +490,23 @@ async function main() {
   check('Gesperrter Schlüssel → Login 401', orgLoginRevoked.status === 401);
   const orgEventsRevoked = await fetch(BASE + '/api/organizer/events', { headers: orgAuth });
   check('Gesperrter Schlüssel → bestehender Token abgelehnt', orgEventsRevoked.status === 401);
+
+  console.log('\n— Backup (DB + Fotos, konsistent) —');
+  {
+    const backupDir = path.join(root, 'data-test-backup-' + Date.now());
+    const r = spawnSync(process.execPath, [path.join(root, 'scripts/backup.mjs')], {
+      env: { ...process.env, TTS_DATA_DIR: DATA_DIR, TTS_BACKUP_DIR: backupDir, TTS_BACKUP_KEEP: '7' },
+      encoding: 'utf8',
+    });
+    check('Backup-Skript läuft (Exit 0)', r.status === 0, (r.stderr || '').slice(0, 200));
+    const backups = (() => { try { return readdirSync(backupDir).filter(f => f.startsWith('tts-backup-')); } catch { return []; } })();
+    check('Backup-Ordner erzeugt (1)', backups.length === 1, backups.join(', '));
+    if (backups[0]) {
+      const bfiles = new Set(readdirSync(path.join(backupDir, backups[0])));
+      check('Backup enthält DB + Fotos + Manifest', bfiles.has('throwtostay.db') && bfiles.has('photos') && bfiles.has('MANIFEST.txt'), [...bfiles].join(', '));
+    }
+    rmSync(backupDir, { recursive: true, force: true });
+  }
 
   console.log('\n— Rate-Limit (Login-Brute-Force-Schutz) —');
   // Am Ende, damit der ausgelöste 30s-Block die übrigen (bereits erledigten)

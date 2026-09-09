@@ -106,7 +106,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - ✅ `develop`-Branch angelegt (aus `main`).
 - ⬜ **Develop-Server** (eingerichtet von dir): eigener Test-Server für `develop`. → Deploy-Skript für `develop` analog zu `update.sh` (trackt `origin/develop` statt `main`).
 - ⬜ **CI**: GitHub Actions (Smoke-Test bei jedem Push nach `develop`/`main`).
-- ⬜ **Smoke-Flake** fixen: Timezone-Boundary („Freigabe = Folgetag 08:00") schlägt 00–08 Uhr CEST fehl (UTC-vs-lokal-Mitternacht).
+- ✅ **Smoke-Flake** fixt: `today` war UTC-Datum (`toISOString`), Server rechnet lokal → nahe Mitternacht Bruch. Jetzt lokales Kalendardatum; in allen TZs grün (verifiziert UTC-11 / UTC+9).
 - ⬜ **Tests erweitern** (laufend, nicht blockierend): Unit (event-helpers, util) + E2E (Upload-Flow).
 - ⬜ **Doku**: Betriebs-Doku (Deploy, Backups) + Architektur-Skizze.
 
@@ -122,7 +122,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - ✅ **Anonyme Gäste**: Name optional; „Ohne Namen beitreten"-Button; Anzeige „Gast"; Server akzeptiert leere Namen (Datenminimierung).
 - ✅ **Retention**: `retention_days` pro Event (Default 30, `0` = manuell) + stündlicher Auto-Löschung-Job; Feld im Expert-Panel (Admin + Veranstalter).
 - ✅ **Löschung & Auskunft (Art. 15/17)**: **per E-Mail-Prozess** — in Datenschutzerklärung dokumentiert (Gast → Veranstalter). Kein In-App-Endpoint (Schlank-Entscheidung).
-- ❓ **Gast löschet letztes Foto**: offen — Phase 4 (UX) klären; Standard = Löschung nur Veranstalter.
+- ✅ **Gast löschet letztes Foto**: **entschieden** (Grenze Phase 3→4, „los gehts") — **nein**, Löschung nur Veranstalter.
 - 🔶 **Verarbeitungsdokumentation**: Datenschutzerklärung deckt Kern ab; formelle AVV optional.
 
 ### Phase 3 — Zuverlässigkeit & Stabilität  ✅ *(App-Level fertig; HA = eigener Infra-Track)*
@@ -141,7 +141,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 
 ### Phase 5 — Finale Abnahme
 - ⬜ **Checkliste** durchgehen (alle Punkte dieser Datei ✅).
-- ⬜ **Tests**: Smoke + E2E grün, Smoke-Flake behoben.
+- ✅ **Tests**: Smoke 91/91 + Restore 8/8 grün, Smoke-Flake behoben.
 - ⬜ **Go-Live**: `develop` → `main` (Production) deployen, Live-Verifikation.
 
 ---

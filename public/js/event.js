@@ -202,8 +202,14 @@
     stopCamera();
     els.camError.classList.remove('visible');
     try {
+      // WICHTIG: KEINE Auflösung (width/height) anfordern. Hohe 16:9-Werte
+      // (z. B. 1920×1440) treffen auf Multi-Kamera-Handys (Huawei P30/P40,
+      // Mate-20-Pro …) den nativen Modus des Telephoto-Sensors → Android wählt
+      // die Zoom-Kamera statt des Weitwinkels → extrem enger Blickwinkel, der
+      // sich per UI nicht rausszoomen lässt. Ohne Auflösungs-Hint liefert das
+      // System die Default-Kamera (Weitwinkel) mit normaler Feldweite.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: state.facing, width: { ideal: 1920 }, height: { ideal: 1440 } },
+        video: { facingMode: state.facing },
         audio: false,
       });
       state.stream = stream;

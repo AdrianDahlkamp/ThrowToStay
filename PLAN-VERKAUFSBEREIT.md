@@ -143,7 +143,8 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 ### Phase 5 — Finale Abnahme
 - ⬜ **Checkliste** durchgehen (alle Punkte dieser Datei ✅).
 - ✅ **Tests**: Smoke 91/91 + Restore 8/8 grün, Smoke-Flake behoben.
-- ⬜ **Go-Live**: `develop` → `main` (Production) deployen, Live-Verifikation.
+- ✅ **Go-Live** (2026-09-11): `develop` → `main` per **Merge** (Commit `acf8b27`) — nicht ff-only, weil der Kamera-Cherry-Pick `main`/`develop` getrennt hatte. Live-Verifikation: Service aktiv, `event.html` 200, **Daten intakt** (2 Events, 25 Fotos, kein Verlust), `retention_days`-Migration ✓, neue Seiten (datenschutz/organizer/admin) 200, Admin-Bearer-Login 200.
+  - ⚠️ **Learned:** `scripts/backup.mjs` war per SFTP als **untracked** auf dem Server → blockierte den ff-Merge. Behoben (identische Datei entfernt, tracked Version kommt via Merge). → `update.sh` künftig: untracked-Dateien vor dem Merge prüfen.
 
 ---
 

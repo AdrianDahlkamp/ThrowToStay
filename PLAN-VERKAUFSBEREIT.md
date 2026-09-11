@@ -113,7 +113,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 ### Phase 1 — Sicherheit  *(erst, Server ist bereits extern erreichbar)*
 - ✅ `ADMIN_PASSWORD`: **kein Default**; Start scheitert, wenn nicht gesetzt (`.env` + Check + `.env.example`).
 - ✅ **`?token=` eliminieren**: Bearer-only (Admin + Organizer). Client war schon vollständig Bearer-basiert (QR/Downloads per `api()`+Blob) — nur Server-`tokenFromReq` + Smoke-Test angepasst. Neuer Test: `?token=`→401.
-- ⬜ **HSTS** auf **Zoraxy** setzen (Infrastruktur, nicht App): `Strict-Transport-Security: max-age=31536000; includeSubDomains` — nur am TLS-Terminierungspunkt. ❓ prüfen, ob schon da.
+- ✅ **HSTS** auf **Zoraxy**: aktiv (Schalter unter „Header" → „HSTS aktivieren") — `max-age=31536000`, ohne `includeSubDomains` (konservativ). HTTP→HTTPS-Redirect (307) funktioniert. Verifiziert 2026-09-11.
 - ⬜ Dependency-Updates: manuell, bei Bedarf (5 Deps). ❓ `npm outdated` hier nicht möglich (npm-Cache read-only) → auf Develop-Server prüfen.
 
 ### Phase 2 — Datenschutz (DSGVO, schlank) ✅ (Kern fertig)

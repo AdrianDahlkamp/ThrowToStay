@@ -108,7 +108,7 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 - ⬜ **CI**: GitHub Actions (Smoke-Test bei jedem Push nach `develop`/`main`).
 - ✅ **Smoke-Flake** fixt: `today` war UTC-Datum (`toISOString`), Server rechnet lokal → nahe Mitternacht Bruch. Jetzt lokales Kalendardatum; in allen TZs grün (verifiziert UTC-11 / UTC+9).
 - ⬜ **Tests erweitern** (laufend, nicht blockierend): Unit (event-helpers, util) + E2E (Upload-Flow).
-- ⬜ **Doku**: Betriebs-Doku (Deploy, Backups) + Architektur-Skizze.
+- ✅ **Doku**: **Betriebs-Doku** (`BETRIEBS-DOKU.md`) geschrieben — Deploy, Backup, Restore, Monitoring, DSGVO, Sicherheit, Troubleshooting, Checkliste (+ Architektur-Überblick).
 
 ### Phase 1 — Sicherheit  *(erst, Server ist bereits extern erreichbar)*
 - ✅ `ADMIN_PASSWORD`: **kein Default**; Start scheitert, wenn nicht gesetzt (`.env` + Check + `.env.example`).
@@ -127,7 +127,8 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 
 ### Phase 3 — Zuverlässigkeit & Stabilität  ✅ *(App-Level fertig; HA = eigener Infra-Track)*
 - ✅ **Atomare Uploads**: Datei + DB konsistent (Cleanup bei jedem Fehler + Startup-Orphan-Sweep → kein Datenverlust).
-- ✅ **Backup**: nightly `data/` (DB via `VACUUM INTO` + Fotos) → **lokal** (anderer Pfad/Disk), Retention 7, systemd-Timer (`scripts/backup.mjs`); später **Cloud** für Production. Restore-Test.
+- ✅ **Backup-Script** `scripts/backup.mjs` (DB via `VACUUM INTO` + Fotos + Manifest, restorable) → **auf Server deployed**. Restore-Test ✅.
+- 🔶 **Backup-Ziel: externes Gerät** (Entscheidung: lokal = nur logischer Schutz, wenig Sinn). **Ziel wird noch eingerichtet → nach hinten verschoben.** Rhythmus **täglich** geplant; bis dahin manuell (§4 `BETRIEBS-DOKU.md`). Vor Go-Live: einmaliges Backup.
 - ⬜ **HA**: Proxmox-HA für den Server (Infrastruktur-Ebene, eigener Track — nicht App-Backup).
 - ✅ **Timeout + Offline**: Client (fetch-Timeout via AbortController, `navigator.onLine`, dauerhaftes Offline-Banner).
 - ✅ **Temp-Dir-Aufräumen**: `data/tmp` bei Start (Orphan-Sweep) + in-request Cleanup (periodic optional).

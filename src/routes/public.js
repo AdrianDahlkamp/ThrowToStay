@@ -171,7 +171,9 @@ function createPublicRouter({ db, dataDir }) {
     if (!util.isValidUuid(uuid)) return res.status(400).json({ error: 'Ungültige Nutzer-Kennung.' });
     const first = String(firstName || '').trim().slice(0, 60);
     const last = String(lastName || '').trim().slice(0, 60);
-    if (!first || !last) return res.status(400).json({ error: 'Bitte Vor- und Nachnamen angeben.' });
+    // Name ist optional: Gäste dürfen anonym beitreten (beide Namen leer). Die
+    // Identität bleibt die Browser-UUID (Foto-Limit, eigene Fotos). Anonyme Gäste
+    // erscheinen in der Galerie/Export als „Gast" (Datenminimierung, DSGVO-freundlich).
 
     const existing = getUserByUuid(event.id, uuid);
     if (existing) {
@@ -191,6 +193,21 @@ function createPublicRouter({ db, dataDir }) {
     { name: 'filtered', maxCount: 1 },
     { name: 'original_thumb', maxCount: 1 },
   ]), async (req, res, next) => {
+    // Alle (temporären + neu geschriebenen) Dateipfade tracken, damit bei einem
+    // Fehler NICHTS Halbfertiges auf der Platte bleibt: kein Orphan, kein
+    // Datenverlust, kein kaputter Galerie-Eintrag. Ein Foto ist entweder
+    // komplett vorhanden + in der DB, oder es gibt weder Eintrag noch Datei.
+    const tmpPaths = [];
+    for (const field of ['original', 'filtered', 'original_thumb']) {
+      if (req.files && req.files[field] && req.files[field][0]) tmpPaths.push(req.files[field][0].path);
+    }
+    const writtenPaths = [];
+    const cleanup = async () => {
+      for (const f of [...writtenPaths, ...tmpPaths]) await fsp.unlink(f).catch(() => {});
+      writtenPaths.length = 0;
+      tmpPaths.length = 0;
+    };
+    let ok = false;
     try {
       const event = getEventBySession(req.params.sessionId);
       if (!event) return res.status(404).json({ error: 'Event nicht gefunden.' });
@@ -214,11 +231,14 @@ function createPublicRouter({ db, dataDir }) {
       const takenWithFilter = req.body.takenWithFilter === '1';
       const filterId = String(req.body.filterId || 'none').slice(0, 32);
       const baseName = `${Date.now()}-${photoCountForUser(user.id) + 1}-${photoIdShort()}`;
+      const track = filename => writtenPaths.push(path.join(photosRoot, event.session_id, user.uuid, filename));
 
       const original = await persistUpload(req.files.original[0].path, event, user.uuid, baseName, 'original');
+      track(original.filename);
       // Raster-Thumbnail fürs Original (klein, schnelle Galerie).
       if (req.files.original_thumb && req.files.original_thumb[0]) {
-        await persistUpload(req.files.original_thumb[0].path, event, user.uuid, baseName, 'original-thumb');
+        const thumb = await persistUpload(req.files.original_thumb[0].path, event, user.uuid, baseName, 'original-thumb');
+        track(thumb.filename);
       }
       // Die Filter-Variante wird immer gespeichert, wenn sie mitgesendet wird
       // (der Client erzeugt sie bei jeder Aufnahme) – so sind beide Varianten
@@ -226,19 +246,41 @@ function createPublicRouter({ db, dataDir }) {
       let filtered = null;
       if (req.files.filtered && req.files.filtered[0]) {
         filtered = await persistUpload(req.files.filtered[0].path, event, user.uuid, baseName, 'filtered');
+        track(filtered.filename);
       }
 
+      // Atomares Check + Insert: BEGIN IMMEDIATE hält den Schreib-Lock über
+      // den Re-Check UND das Insert, sodass parallele Uploads desselben Users
+      // nacheinander statt überlappend ausgeführt werden (kein Limit-Race).
+      // Der Lock wird NUR hier (kurz, synchron) gehalten – nicht beim Datei-I/O.
       const id = util.generateId();
-      db.prepare(
-        `INSERT INTO photos (id, event_id, user_id, original_file, filtered_file, filter_id, taken_with_filter, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        id, event.id, user.id, original.filename,
-        filtered ? filtered.filename : null,
-        filtered ? filterId : null,
-        takenWithFilter ? 1 : 0,
-        util.nowIso()
-      );
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const c2 = photoCountForUser(user.id);
+        if (c2 >= event.max_photos_per_user) {
+          db.exec('ROLLBACK');
+          return res.status(409).json({ error: `Das Limit von ${event.max_photos_per_user} Fotos ist erreicht.` });
+        }
+        const t2 = db.prepare('SELECT COUNT(*) AS c FROM photos WHERE event_id = ?').get(event.id).c;
+        if (t2 >= MAX_PHOTOS_PER_EVENT) {
+          db.exec('ROLLBACK');
+          return res.status(409).json({ error: 'Das Foto-Limit für dieses Event ist erreicht.' });
+        }
+        db.prepare(
+          `INSERT INTO photos (id, event_id, user_id, original_file, filtered_file, filter_id, taken_with_filter, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          id, event.id, user.id, original.filename,
+          filtered ? filtered.filename : null,
+          filtered ? filterId : null,
+          takenWithFilter ? 1 : 0,
+          util.nowIso()
+        );
+        db.exec('COMMIT');
+      } catch (txErr) {
+        try { db.exec('ROLLBACK'); } catch { /* bereits gerollt */ }
+        throw txErr;
+      }
 
       const photo = db.prepare('SELECT * FROM photos WHERE id = ?').get(id);
       res.status(201).json({
@@ -246,8 +288,11 @@ function createPublicRouter({ db, dataDir }) {
         photoCount: photoCountForUser(user.id),
         maxPhotosPerUser: event.max_photos_per_user,
       });
+      ok = true;
     } catch (err) {
       next(err);
+    } finally {
+      if (!ok) await cleanup();
     }
   });
 

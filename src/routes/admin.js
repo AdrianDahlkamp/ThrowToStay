@@ -6,7 +6,7 @@
  * Galerie-Freigabe steuern, Teilnehmer einsehen und alles exportieren.
  *
  * Auth: Passwort (ENV ADMIN_PASSWORD) gegen einen HMAC-Session-Token,
- * der als Bearer-Header ODER als ?token=-Parameter (für <img>/QR) akzeptiert wird.
+ * der ausschließlich als Bearer-Header akzeptiert wird (nicht per ?token= in der URL).
  */
 
 const express = require('express');
@@ -23,10 +23,13 @@ function createAdminRouter({ db, dataDir, adminSecret, adminPassword }) {
 
   // ------------------------------------------------------------- Auth-Check
 
+  // Token ausschließlich per Bearer-Header – NICHT per ?token= in der URL
+  // (Token-Leakage via Referer/Logs vermeiden). Der Client nutzt durchgehend api()
+  // mit Authorization-Header, auch für QR-/ZIP-Downloads (per Blob).
   function tokenFromReq(req) {
     const auth = req.get('authorization') || '';
     if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
-    return req.query.token;
+    return null;
   }
 
   function requireAdmin(req, res, next) {

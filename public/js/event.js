@@ -36,6 +36,7 @@
     flashBtn: $('flashBtn'), flipBtn: $('flipBtn'), shutterBtn: $('shutterBtn'), toGalleryBtn: $('toGalleryBtn'),
     photoCounter: $('photoCounter'),
     retryBanner: $('retryBanner'), retryText: $('retryText'), retryBtn: $('retryBtn'),
+    offlineBanner: $('offlineBanner'),
     galleryHint: $('galleryHint'), selectToggle: $('selectToggle'), lockedBanner: $('lockedBanner'), photoGrid: $('photoGrid'),
     selectBar: $('selectBar'), selectCount: $('selectCount'), selectAllBtn: $('selectAllBtn'), downloadSelBtn: $('downloadSelBtn'),
     lightbox: $('lightbox'), lbImg: $('lbImg'), lbName: $('lbName'), lbClose: $('lbClose'),
@@ -46,6 +47,8 @@
     firstNameInput: $('firstNameInput'), lastNameInput: $('lastNameInput'),
     onboardNextBtn: $('onboardNextBtn'), onboardBackBtn: $('onboardBackBtn'),
     joinBtn: $('joinBtn'), joinBtnLabel: $('joinBtnLabel'), onboardError: $('onboardError'),
+    anonymousBtn: $('anonymousBtn'),
+    consentChk: $('consentChk'), consentNextBtn: $('consentNextBtn'),
     toast: $('toast'),
   };
 
@@ -85,8 +88,26 @@
     return u;
   }
 
+  // Fetch mit Timeout (AbortController): verhindert, dass ein hängender Request
+  // den Gast endlos blockiert. Bei Timeout klaren, diskreten Fehler werfen
+  // (wird vom bestehenden Fehler-/Retry-Pfad aufgefangen).
+  async function fetchWithTimeout(path, opts = {}, timeoutMs = 15000) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetch(path, { ...opts, signal: ctrl.signal });
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        throw new Error('Zeitüberschreitung – bitte erneut versuchen.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
   async function api(path, opts) {
-    const res = await fetch(path, opts);
+    const res = await fetchWithTimeout(path, opts, 15000);
     if (!res.ok) {
       let msg = 'Serverfehler (' + res.status + ')';
       try { const j = await res.json(); if (j.error) msg = j.error; } catch { /* ignore */ }
@@ -128,10 +149,12 @@
   function shortName(p) {
     const f = (p.owner.firstName || '').trim();
     const l = (p.owner.lastName || '').trim();
-    return `${f} ${l ? l.charAt(0).toUpperCase() + '.' : ''}`.trim();
+    if (!f && !l) return 'Gast';
+    return `${f} ${l ? l.charAt(0).toUpperCase() + '.' : ''}`.trim() || 'Gast';
   }
   function fullName(p) {
-    return `${p.owner.firstName} ${p.owner.lastName}`.trim();
+    const n = `${p.owner.firstName || ''} ${p.owner.lastName || ''}`.trim();
+    return n || 'Gast';
   }
 
   // ------------------------------------------------------------- Icons
@@ -437,10 +460,18 @@ state.track = null;
   }
 
   function queueUpload(item) {
-    state.uploadChain = state.uploadChain.then(() => sendUpload(item)).catch(() => {
-      state.failedUploads.push(item);
-      updateRetryBanner();
-    });
+    state.uploadChain = state.uploadChain
+      .then(() => sendUpload(item))
+      .then(() => {
+        // Diskretes Erfolgs-Feedback: genau ein kurzes Toast pro erfolgreichem
+        // Upload (sequenziell, kein Bombardement). Fehler laufen still über
+        // den Retry-Banner (siehe .catch) – "sorglose Party".
+        toast('Foto gespeichert');
+      })
+      .catch(() => {
+        state.failedUploads.push(item);
+        updateRetryBanner();
+      });
   }
 
   async function sendUpload(item) {
@@ -457,7 +488,7 @@ state.track = null;
       if (thumb) fd.set('original_thumb', thumb, 'original-thumb.jpg');
     }
 
-    const res = await fetch(`/api/e/${SID}/photos`, { method: 'POST', body: fd });
+    const res = await fetchWithTimeout(`/api/e/${SID}/photos`, { method: 'POST', body: fd }, 90000);
     if (!res.ok) {
       let msg = 'Upload fehlgeschlagen';
       try { const j = await res.json(); if (j.error) msg = j.error; } catch { /* ignore */ }
@@ -510,6 +541,23 @@ state.track = null;
     const n = state.failedUploads.length;
     els.retryBanner.classList.toggle('visible', n > 0);
     els.retryText.textContent = n === 1 ? 'Ein Foto konnte nicht hochgeladen werden.' : `${n} Fotos konnten nicht hochgeladen werden.`;
+  }
+
+  // Diskrete Offline-Anzeige: dauerhaftes Banner (kein Toast), reagiert auf
+  // navigator.onLine + online/offline-Ereignisse. Nichts Aufdringliches –
+  // der Gast soll die Party genießen, nicht von Fehlern bombardiert werden.
+  function updateOfflineBanner() {
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    els.offlineBanner.classList.toggle('visible', offline);
+    if (offline) {
+      els.offlineBanner.textContent = '';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      els.offlineBanner.appendChild(dot);
+      els.offlineBanner.appendChild(document.createTextNode(
+        'Offline – Fotos können gerade nicht gesendet werden. Bitte die Verbindung prüfen; gesendete Fotos erscheinen in der Galerie.'
+      ));
+    }
   }
 
   function retryFailed() {
@@ -1030,7 +1078,8 @@ state.track = null;
   function renderHeader() {
     els.eventName.textContent = state.event ? state.event.name : 'Event';
     if (state.user) {
-      els.userLine.textContent = `${state.user.firstName} ${state.user.lastName}`;
+      const n = `${state.user.firstName || ''} ${state.user.lastName || ''}`.trim();
+      els.userLine.textContent = n || 'Gast';
     }
   }
 
@@ -1063,7 +1112,9 @@ state.track = null;
   function showOnboardStep(n, doFocus = true) {
     onboardStep = n;
     els.onboardSteps.forEach(s => { s.style.display = (Number(s.dataset.step) === n) ? '' : 'none'; });
-    if (doFocus) (n === 1 ? els.firstNameInput : els.lastNameInput).focus();
+    // Schritt 0 = Einwilligung (keine Namens-Eingabe, kein Fokus auf Eingabefeld).
+    if (doFocus && n === 1) els.firstNameInput.focus();
+    else if (doFocus && n === 2) els.lastNameInput.focus();
   }
 
   function showOnboard(prefill = false, doFocus = true) {
@@ -1076,7 +1127,9 @@ state.track = null;
     els.joinBtnLabel.textContent = prefill ? 'Speichern' : 'Beitreten';
     els.onboard.style.display = 'flex';
     positionOnboard();
-    showOnboardStep(prefill ? 2 : 1, doFocus);
+    // Neue Gäste starten bei der Einwilligung (Schritt 0); beim Ändern des Namens
+    // (prefill) wurde bereits eingewilligt → direkt zu Schritt 2.
+    showOnboardStep(prefill ? 2 : 0, doFocus);
   }
 
   function hideOnboard() {
@@ -1098,6 +1151,11 @@ state.track = null;
   // ------------------------------------------------------------- Init
 
   async function init() {
+    // Offline-Erkennung: dauerhaftes, dezentes Banner (kein Toast).
+    window.addEventListener('online', updateOfflineBanner);
+    window.addEventListener('offline', updateOfflineBanner);
+    updateOfflineBanner();
+
     if (!SID) {
       els.eventName.textContent = 'Ungültiger Link';
       return;
@@ -1222,6 +1280,31 @@ state.track = null;
     showOnboardStep(2);
   });
   els.onboardBackBtn.addEventListener('click', () => showOnboardStep(1));
+
+  // Einwilligung: „Weiter" erst nach Haken; dann zum Namens-Schritt.
+  els.consentChk.addEventListener('change', () => {
+    els.consentNextBtn.disabled = !els.consentChk.checked;
+  });
+  els.consentNextBtn.addEventListener('click', () => {
+    if (!els.consentChk.checked) return;
+    els.onboardError.textContent = '';
+    showOnboardStep(1);
+  });
+
+  // Anonym beitreten: kein Name (Datenminimierung). Identität bleibt die Browser-UUID.
+  els.anonymousBtn.addEventListener('click', async () => {
+    els.anonymousBtn.disabled = true;
+    try {
+      await registerUser('', '');
+      hideOnboard();
+      await afterJoin();
+      toast('Willkommen!');
+    } catch (err) {
+      els.onboardError.textContent = err.message;
+    } finally {
+      els.anonymousBtn.disabled = false;
+    }
+  });
 
   els.onboardForm.addEventListener('submit', async ev => {
     ev.preventDefault();

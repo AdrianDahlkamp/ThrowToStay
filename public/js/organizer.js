@@ -100,6 +100,68 @@
     });
   }
 
+  // Wie askConfirm, aber zusätzlich: Der Bestätigen-Button wird erst aktiv,
+  // wenn das geforderte Wort (z. B. der Event-Name) eingegeben wurde.
+  // Guardrail für finale, unwiderrufliche Aktionen (Event-Löschung) – idiotensicher.
+  function askConfirmType(title, message, requiredWord, confirmLabel = 'Löschen') {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      const card = document.createElement('div');
+      card.className = 'confirm-card';
+      const t = document.createElement('div');
+      t.className = 'confirm-title';
+      t.textContent = title;
+      const m = document.createElement('div');
+      m.className = 'confirm-msg';
+      m.textContent = message;
+      const hint = document.createElement('div');
+      hint.className = 'confirm-typehint';
+      hint.textContent = `Zum Bestätigen „${requiredWord}" eintragen:`;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'confirm-typeinput';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.placeholder = requiredWord;
+      input.setAttribute('aria-label', 'Zur Bestätigung den Event-Namen eintippen');
+      const actions = document.createElement('div');
+      actions.className = 'confirm-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn small secondary';
+      cancel.textContent = 'Abbrechen';
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn small danger';
+      ok.textContent = confirmLabel;
+      ok.disabled = true;
+      let finished = false;
+      const done = v => {
+        if (finished) return;
+        finished = true;
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(v);
+      };
+      const matches = () => input.value.trim().toLowerCase() === String(requiredWord).trim().toLowerCase();
+      const onKey = ev => {
+        if (ev.key === 'Escape') done(false);
+        if (ev.key === 'Enter' && matches()) done(true);
+      };
+      input.addEventListener('input', () => { ok.disabled = !matches(); });
+      cancel.addEventListener('click', () => done(false));
+      ok.addEventListener('click', () => { if (matches()) done(true); });
+      overlay.addEventListener('click', ev => { if (ev.target === overlay) done(false); });
+      card.append(t, m, hint, input, actions);
+      actions.append(cancel, ok);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      document.addEventListener('keydown', onKey);
+      input.focus();
+    });
+  }
+
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString('de-DE', {
       weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -221,9 +283,15 @@
     delBtn.className = 'btn small danger icon-btn';
     delBtn.type = 'button';
     delBtn.title = 'Event löschen';
+    delBtn.setAttribute('aria-label', 'Event löschen');
     delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
-      if (!(await askConfirm('Event löschen', `Event "${e.name}" inkl. aller Fotos wirklich löschen?`))) return;
+      const ok2 = await askConfirmType(
+        'Event endgültig löschen',
+        `Event "${e.name}" inkl. aller ${e.photoCount} Fotos und Daten unwiderruflich löschen?`,
+        e.name
+      );
+      if (!ok2) return;
       try {
         await api('/events/' + e.id, { method: 'DELETE' });
         toast('Event gelöscht.');
@@ -264,6 +332,7 @@
     copyBtn.className = 'btn small secondary icon-btn';
     copyBtn.type = 'button';
     copyBtn.title = 'Event-URL kopieren';
+    copyBtn.setAttribute('aria-label', 'Event-URL kopieren');
     copyBtn.appendChild(iconSvg('copy'));
     copyBtn.addEventListener('click', async () => {
       try {
@@ -283,6 +352,7 @@
     dlQr.type = 'button';
     dlQr.style.marginTop = '10px';
     dlQr.title = 'QR-Code herunterladen (PNG)';
+    dlQr.setAttribute('aria-label', 'QR-Code herunterladen');
     dlQr.appendChild(iconSvg('download'));
     dlQr.addEventListener('click', async () => {
       const blob = await api(`/events/${e.id}/qr.png`);
@@ -333,6 +403,10 @@
     fQuality.querySelector('input').max = '100';
     const fUnlock = mkField('Galerie-Freigabe', 'datetime-local', toLocalInputValue(e.galleryUnlockAt),
       'Zeitpunkt, ab dem alle Gäste die gemeinsame Galerie aller Fotos sehen. Standard: Folgetag um 08:00 Uhr.');
+    const fRetention = mkField('Automatische Löschung nach (Tagen)', 'number', e.retentionDays,
+      'DSGVO: Fotos und Daten werden automatisch N Tage NACH DEM EVENT-DATUM gelöscht. 0 = keine automatische Löschung (manuell). Standard: 30.');
+    fRetention.querySelector('input').min = '0';
+    fRetention.querySelector('input').max = '365';
 
     // Reiner Wegwerfkamera-Modus: Filter-Buttons in der Kamera ausblenden.
     const fHideFilters = document.createElement('div');
@@ -367,7 +441,7 @@
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-stack';
-    expertGrid.append(fLimit, fLimitPresets, fSide, fQuality, fUnlock, fHideFilters);
+    expertGrid.append(fLimit, fLimitPresets, fSide, fQuality, fUnlock, fHideFilters, fRetention);
     panelExpert.appendChild(expertGrid);
 
     const usersBtn = document.createElement('button');
@@ -388,6 +462,26 @@
     const usersPanel = document.createElement('div');
     usersPanel.className = 'users-panel';
     panelExpert.appendChild(usersPanel);
+
+    // Foto-Verwaltung (nur Veranstalter): Fotos des Events ansehen + einzeln löschen.
+    const photosBtn = document.createElement('button');
+    photosBtn.className = 'btn small secondary';
+    photosBtn.type = 'button';
+    photosBtn.textContent = 'Fotos verwalten';
+    photosBtn.title = 'Fotos des Events anzeigen und einzeln löschen';
+    photosBtn.addEventListener('click', async () => {
+      try {
+        const data = await api(`/events/${e.id}/photos`);
+        renderPhotosPanel(photosPanel, data.photos, e.id);
+        photosPanel.classList.toggle('visible', true);
+        photosBtn.textContent = photosPanel.classList.contains('visible') ? 'Fotos verbergen' : 'Fotos verwalten';
+      } catch (err) { toast(err.message, true); }
+    });
+    panelExpert.appendChild(photosBtn);
+
+    const photosPanel = document.createElement('div');
+    photosPanel.className = 'photos-panel';
+    panelExpert.appendChild(photosPanel);
 
     const switchTab = which => {
       tabBasic.classList.toggle('active', which === 'basic');
@@ -414,6 +508,7 @@
         maxImageSide: parseInt(val(fSide), 10),
         jpegQuality: parseInt(val(fQuality), 10),
         hideFilterButtons: fHideFiltersCb.checked,
+        retentionDays: parseInt(val(fRetention), 10),
       };
       if (val(fUnlock)) patch.galleryUnlockAt = new Date(val(fUnlock)).toISOString();
       try {
@@ -508,6 +603,61 @@
     }
     table.appendChild(tbody);
     panel.appendChild(table);
+  }
+
+  // Foto-Grid für die Foto-Verwaltung: Raster mit Rasterbild + Name/Zeit + Lösch-Button.
+  // Thumbnails werden per api() (Bearer) als Blob geladen und nur lazy (IntersectionObserver).
+  function renderPhotosPanel(panel, photos, eventId) {
+    panel.innerHTML = '';
+    if (!photos.length) {
+      panel.innerHTML = '<div class="empty-state">Noch keine Fotos vorhanden.</div>';
+      return;
+    }
+    const grid = document.createElement('div');
+    grid.className = 'photo-grid';
+    for (const p of photos) {
+      const item = document.createElement('div');
+      item.className = 'photo-item';
+      const img = document.createElement('img');
+      img.className = 'photo-thumb';
+      img.alt = `Foto von ${p.owner}`;
+      img.dataset.loadId = p.id;
+      const meta = document.createElement('div');
+      meta.className = 'photo-meta';
+      meta.textContent = `${p.owner} · ${fmtDateTime(p.createdAt)}`;
+      const del = document.createElement('button');
+      del.className = 'btn small danger icon-btn photo-del';
+      del.type = 'button';
+      del.title = 'Foto löschen';
+      del.setAttribute('aria-label', `Foto von ${p.owner} löschen`);
+      del.appendChild(iconSvg('trash'));
+      del.addEventListener('click', async () => {
+        if (!(await askConfirm('Foto löschen', `Foto von ${p.owner} (${fmtDateTime(p.createdAt)}) wirklich löschen?`))) return;
+        del.disabled = true;
+        try {
+          await api(`/events/${eventId}/photos/${p.id}`, { method: 'DELETE' });
+          item.remove();
+          toast('Foto gelöscht.');
+          loadEvents();
+        } catch (err) { toast(err.message, true); del.disabled = false; }
+      });
+      item.append(img, meta, del);
+      grid.appendChild(item);
+    }
+    // Lazy Laden: nur sichtbare (bald sichtbare) Thumbnails holen – spart bei vielen Fotos.
+    const observer = new IntersectionObserver(entries => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        const el = en.target;
+        observer.unobserve(el);
+        const pid = el.dataset.loadId;
+        api(`/events/${eventId}/photos/${pid}/thumb`)
+          .then(blob => { el.src = URL.createObjectURL(blob); })
+          .catch(() => { /* Einzelnes Thumb nicht ladbar – restliche Fotos unbeeinträchtigt */ });
+      }
+    }, { rootMargin: '300px 0px' });
+    grid.querySelectorAll('.photo-thumb').forEach(img => observer.observe(img));
+    panel.appendChild(grid);
   }
 
   // ------------------------------------------------------------- Event-Wizard

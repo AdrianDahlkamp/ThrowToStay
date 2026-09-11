@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ThrowToStay – Datenschutzerklärung</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <meta name="theme-color" content="#0e1116">
+  <style>
+    .ds-wrap { max-width: 640px; margin: 0 auto; padding: 28px 18px 60px; }
+    .ds-wrap h1 { font-size: 24px; margin: 6px 0 4px; }
+    .ds-wrap .logo { font-size: 26px; }
+    .ds-wrap h2 { font-size: 16px; margin: 26px 0 8px; }
+    .ds-wrap p, .ds-wrap li { color: var(--text-dim); font-size: 14.5px; line-height: 1.6; }
+    .ds-wrap ul { padding-left: 18px; }
+    .ds-wrap li { margin: 4px 0; }
+    .ds-wrap a { color: var(--accent); }
+    .ds-wrap .back { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 18px; color: var(--text-dim); text-decoration: none; font-size: 14px; }
+    .ds-wrap .stand { margin-top: 34px; font-size: 13px; color: var(--text-dim); opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <div class="ds-wrap">
+    <a class="back" href="javascript:history.back()">← Zurück</a>
+    <div class="logo">ThrowToStay</div>
+    <h1>Datenschutzerklärung</h1>
+    <p>ThrowToStay ist eine Event-App, mit der Gäste bei einer Veranstaltung Fotos machen und diese in einer gemeinsamen Galerie teilen. Diese Erklärung beschreibt, welche Daten wir dabei verarbeiten und welche Rechte dir zustehen.</p>
+
+    <h2>Verantwortlicher</h2>
+    <p>Verantwortlich für die Verarbeitung deiner Daten ist der Veranstalter bzw. Betreiber der jeweiligen Veranstaltung. Die Kontakt- und E-Mail-Adresse findest du auf der Veranstaltung selbst (bzw. beim Ausgeben des Zugangs-Links).</p>
+
+    <h2>Welche Daten wir verarbeiten</h2>
+    <ul>
+      <li><strong>Name</strong> (Vor- und Nachname) – <em>optional</em>. Du kannst auch anonym teilnehmen.</li>
+      <li><strong>Fotos</strong>, die du mit der App aufnimmst (Original und die gefilterte Variante).</li>
+      <li><strong>Geräte-Kennung</strong> (eine zufällige Kennung, die nur in deinem Browser gespeichert wird und uns deine Fotos zuordnen lässt – kein Tracking über die Veranstaltung hinaus).</li>
+      <li><strong>Event-Datum</strong> und der Zeitpunkt deiner Fotos.</li>
+    </ul>
+    <p>Wir verwenden keine Cookies und keine Analyse- oder Werbe-Dienste. Die Geräte-Kennung wird ausschließlich im LocalStorage deines Browsers gehalten.</p>
+
+    <h2>Zweck und Rechtsgrundlage</h2>
+    <p>Deine Daten werden ausschließlich verarbeitet, um die gemeinsame Event-Galerie zu erstellen: Deine Fotos werden ab dem Freigabe-Zeitpunkt (standardmäßig am Folgetag) für alle Gäste der Veranstaltung sichtbar und zum Download bereitgestellt. Rechtsgrundlage ist deine <strong>freiwillige Einwilligung</strong> (Art. 6 Abs. 1 lit. a DSGVO), die du beim Beitreten erteilst und die du jederzeit widerrufen kannst.</p>
+
+    <h2>Speicherdauer (Retention)</h2>
+    <p>Fotos und zugehörige Daten werden <strong>automatisch gelöscht</strong>, sobald die vom Veranstalter festgelegte Speicherdauer abgelaufen ist (die konkrete Dauer wird pro Veranstaltung definiert; standardmäßig einige Wochen nach dem Event). Danach sind die Fotos nicht mehr über die App abrufbar. Der Veranstalter kann die Daten auch früher manuell löschen.</p>
+
+    <h2>Deine Rechte</h2>
+    <p>Dir stehen die folgenden Rechte zu: <strong>Auskunft</strong> (Art. 15), <strong>Berichtigung</strong> (Art. 16), <strong>Löschung</strong> (Art. 17), <strong>Einschränkung der Verarbeitung</strong> (Art. 18), <strong>Datenübertragbarkeit</strong> (Art. 20) sowie <strong>Widerruf der Einwilligung</strong> und <strong>Beschwerde</strong> bei einer Datenschutz-Aufsichtsbehörde (Art. 77).</p>
+    <p>Auskunft- und Löschersuchen kannst du einfach per E-Mail an den Veranstalter bzw. den Betreiber der Veranstaltung richten. Wir behandeln solche Anfragen zeitnah und kostenlos.</p>
+
+    <h2>Hosting und Datenstandort</h2>
+    <p>Die Daten werden auf einem Server <strong>in der Europäischen Union (Deutschland)</strong> gespeichert und nicht in Drittländer übertragen. Es findet keine Weitergabe deiner Daten an Dritte statt.</p>
+
+    <h2>Kontakt</h2>
+    <p>Fragen zum Datenschutz oder zu deinen Rechten? Wende dich direkt an den Veranstalter der jeweiligen Veranstaltung (Kontakt- und E-Mail-Adresse werden bei der Veranstaltung ausgegeben).</p>
+
+    <p class="stand">Stand: <span id="dsStand"></span></p>
+  </div>
+  <script>
+    // Stand-Datum automatisch setzen (verhindert veraltete Angaben).
+    document.getElementById('dsStand').textContent =
+      new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' });
+  </script>
+</body>
+</html>

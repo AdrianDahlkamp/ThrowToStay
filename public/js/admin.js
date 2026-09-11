@@ -106,6 +106,68 @@
     });
   }
 
+  // Wie askConfirm, aber zusätzlich: Der Bestätigen-Button wird erst aktiv,
+  // wenn das geforderte Wort (z. B. der Event-Name) eingegeben wurde.
+  // Guardrail für finale, unwiderrufliche Aktionen (Event-Löschung) – idiotensicher.
+  function askConfirmType(title, message, requiredWord, confirmLabel = 'Löschen') {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      const card = document.createElement('div');
+      card.className = 'confirm-card';
+      const t = document.createElement('div');
+      t.className = 'confirm-title';
+      t.textContent = title;
+      const m = document.createElement('div');
+      m.className = 'confirm-msg';
+      m.textContent = message;
+      const hint = document.createElement('div');
+      hint.className = 'confirm-typehint';
+      hint.textContent = `Zum Bestätigen „${requiredWord}" eintragen:`;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'confirm-typeinput';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.placeholder = requiredWord;
+      input.setAttribute('aria-label', 'Zur Bestätigung den Event-Namen eintippen');
+      const actions = document.createElement('div');
+      actions.className = 'confirm-actions';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn small secondary';
+      cancel.textContent = 'Abbrechen';
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn small danger';
+      ok.textContent = confirmLabel;
+      ok.disabled = true;
+      let finished = false;
+      const done = v => {
+        if (finished) return;
+        finished = true;
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(v);
+      };
+      const matches = () => input.value.trim().toLowerCase() === String(requiredWord).trim().toLowerCase();
+      const onKey = ev => {
+        if (ev.key === 'Escape') done(false);
+        if (ev.key === 'Enter' && matches()) done(true);
+      };
+      input.addEventListener('input', () => { ok.disabled = !matches(); });
+      cancel.addEventListener('click', () => done(false));
+      ok.addEventListener('click', () => { if (matches()) done(true); });
+      overlay.addEventListener('click', ev => { if (ev.target === overlay) done(false); });
+      card.append(t, m, hint, input, actions);
+      actions.append(cancel, ok);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      document.addEventListener('keydown', onKey);
+      input.focus();
+    });
+  }
+
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString('de-DE', {
       weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -223,9 +285,15 @@
     delBtn.className = 'btn small danger icon-btn';
     delBtn.type = 'button';
     delBtn.title = 'Event löschen';
+    delBtn.setAttribute('aria-label', 'Event löschen');
     delBtn.appendChild(iconSvg('trash'));
     delBtn.addEventListener('click', async () => {
-      if (!(await askConfirm('Event löschen', `Event "${e.name}" inkl. aller Fotos wirklich löschen?`))) return;
+      const ok2 = await askConfirmType(
+        'Event endgültig löschen',
+        `Event "${e.name}" inkl. aller ${e.photoCount} Fotos und Daten unwiderruflich löschen?`,
+        e.name
+      );
+      if (!ok2) return;
       try {
         await api('/events/' + e.id, { method: 'DELETE' });
         toast('Event gelöscht.');
@@ -266,6 +334,7 @@
     copyBtn.className = 'btn small secondary icon-btn';
     copyBtn.type = 'button';
     copyBtn.title = 'Event-URL kopieren';
+    copyBtn.setAttribute('aria-label', 'Event-URL kopieren');
     copyBtn.appendChild(iconSvg('copy'));
     copyBtn.addEventListener('click', async () => {
       try {
@@ -285,6 +354,7 @@
     dlQr.type = 'button';
     dlQr.style.marginTop = '10px';
     dlQr.title = 'QR-Code herunterladen (PNG)';
+    dlQr.setAttribute('aria-label', 'QR-Code herunterladen');
     dlQr.appendChild(iconSvg('download'));
     dlQr.addEventListener('click', async () => {
       const blob = await api(`/events/${e.id}/qr.png`);
@@ -367,6 +437,17 @@
     hideFiltersCb.checked = !!e.hideFilterButtons;
     fHideFilters.appendChild(hideFiltersCb);
 
+    // DSGVO-Retention: automatische Löschung nach N Tagen nach dem Event-Datum.
+    const fRetention = document.createElement('div');
+    fRetention.className = 'field';
+    fRetention.innerHTML = '<label class="tip" data-tip="DSGVO: Fotos und Daten werden automatisch N Tage NACH DEM EVENT-DATUM gelöscht. 0 = keine automatische Löschung (manuell). Standard: 30.">Automatische Löschung nach (Tagen)</label>';
+    const retentionInput = document.createElement('input');
+    retentionInput.type = 'number';
+    retentionInput.min = '0';
+    retentionInput.max = '365';
+    retentionInput.value = e.retentionDays;
+    fRetention.appendChild(retentionInput);
+
     // Tabs: Basis-Einstellungen / Expert-Einstellungen
     const tabBar = document.createElement('div');
     tabBar.className = 'tabs';
@@ -389,7 +470,7 @@
     panelExpert.className = 'tab-panel';
     const expertGrid = document.createElement('div');
     expertGrid.className = 'settings-stack';
-    expertGrid.append(fLimit, fSide, fQuality, fUnlock, fHideFilters);
+    expertGrid.append(fLimit, fSide, fQuality, fUnlock, fHideFilters, fRetention);
     panelExpert.appendChild(expertGrid);
 
     const usersBtn = document.createElement('button');
@@ -436,6 +517,7 @@
         maxImageSide: parseInt(sideInput.value, 10),
         jpegQuality: parseInt(qualityInput.value, 10),
         hideFilterButtons: hideFiltersCb.checked,
+        retentionDays: parseInt(retentionInput.value, 10),
       };
       if (unlockInput.value) {
         patch.galleryUnlockAt = new Date(unlockInput.value).toISOString();

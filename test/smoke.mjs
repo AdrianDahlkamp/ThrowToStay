@@ -5,7 +5,7 @@
  * Ausführen: npm test
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { rmSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,7 +95,11 @@ async function main() {
   const noAuth = await fetch(BASE + '/api/admin/events');
   check('Admin-API ohne Token → 401', noAuth.status === 401);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Lokales Kalendardatum (die App rechnet in lokaler Zeit, nicht UTC).
+  // Vorher: toISOString().slice(0,10) = UTC-Datum → weicht nahe Mitternacht
+  // (00:00–Offset Uhr) vom lokalen Tag ab und brach den Freigabe-Test.
+  const nowD = new Date();
+  const today = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
   const createRes = await fetch(BASE + '/api/admin/events', {
     method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Testevent', eventDate: today, maxPhotosPerUser: 30 }),
@@ -103,6 +107,7 @@ async function main() {
   check('Event anlegen OK (201)', createRes.status === 201);
   const { event } = await createRes.json();
   check('Event hat 10-stellige Session-ID', /^[0-9A-HJKMNP-TV-Z]{10}$/.test(event.sessionId), event.sessionId);
+  check('Retention-Default = 30 Tage (DSGVO)', event.retentionDays === 30, String(event.retentionDays));
   const unlockDate = new Date(event.galleryUnlockAt);
   const tomorrow = new Date(Date.now() + 864e5);
   check('Freigabe = Folgetag 08:00 Uhr (lokale Zeit)',
@@ -122,17 +127,43 @@ async function main() {
   const { event: customEvent } = await createCustomRes.json();
   check('Freigabe-Zeitpunkt aus Body übernommen', customEvent.galleryUnlockAt === customUnlock, customEvent.galleryUnlockAt);
 
-  const qr = await fetch(BASE + `/api/admin/events/${event.id}/qr.png?token=${encodeURIComponent(token)}`);
+  // DSGVO-Retention: explizite Speicherdauer wird beim Anlegen + Ändern übernommen.
+  const createRetRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'RetentionTest', eventDate: today, retentionDays: 14 }),
+  });
+  const { event: retEvent } = await createRetRes.json();
+  check('Retention (14 Tage) beim Anlegen übernommen', createRetRes.status === 201 && retEvent.retentionDays === 14, String(retEvent.retentionDays));
+  const upRet = await fetch(BASE + `/api/admin/events/${retEvent.id}`, {
+    method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ retentionDays: 7 }),
+  });
+  const { event: retEvent2 } = await upRet.json();
+  check('Retention (7 Tage) beim Ändern übernommen', upRet.ok && retEvent2.retentionDays === 7, String(retEvent2.retentionDays));
+
+  const qr = await fetch(BASE + `/api/admin/events/${event.id}/qr.png`, { headers: auth });
   const qrBuf = Buffer.from(await qr.arrayBuffer());
-  check('QR-Code PNG ausgeliefert', qr.ok && qrBuf.length > 100 && qrBuf[0] === 0x89 && qrBuf[1] === 0x50);
+  check('QR-Code PNG ausgeliefert (Bearer-Header)', qr.ok && qrBuf.length > 100 && qrBuf[0] === 0x89 && qrBuf[1] === 0x50);
+  // Sicherheit: ?token= in der URL wird abgelehnt (Token ausschließlich per Bearer).
+  const qrQuery = await fetch(BASE + `/api/admin/events/${event.id}/qr.png?token=${encodeURIComponent(token)}`);
+  check('?token= in URL abgelehnt (401)', qrQuery.status === 401);
 
   console.log('\n— Event-App: State & Registrierung —');
   const eventPage = await fetch(BASE + `/e/${event.sessionId}`);
   const eventHtml = await eventPage.text();
   check('Event-URL liefert Kamera-App', eventPage.ok && eventHtml.includes('shutterBtn'));
   check('Onboarding-Wizard vorhanden (Vorname→Nachname)', eventHtml.includes('onboardNextBtn') && eventHtml.includes('onboardBackBtn') && eventHtml.includes('data-step="2"') && eventHtml.includes('joinBtnLabel'));
+  check('Onboarding: Einwilligungsschritt + Anonym-Option vorhanden', eventHtml.includes('data-step="0"') && eventHtml.includes('consentChk') && eventHtml.includes('anonymousBtn'));
+  check('Offline-Banner vorhanden (dauerhaft, kein Toast)', eventHtml.includes('offlineBanner'));
+  const eventJs = await (await fetch(BASE + '/js/event.js')).text();
+  check('Fetch-Timeout + Offline-Erkennung (Client)', eventJs.includes('fetchWithTimeout') && eventJs.includes('updateOfflineBanner') && eventJs.includes('navigator.onLine'));
   const csp = String(eventPage.headers.get('content-security-policy') || '');
   check('CSP ohne Google-Fonts (self-hosted)', !csp.includes('googleapis') && !csp.includes('gstatic'));
+
+  // Datenschutzerklärung (DSGVO): erreichbar + enthält die Kernpunkte.
+  const dsPage = await fetch(BASE + '/datenschutz.html');
+  const dsHtml = await dsPage.text();
+  check('Datenschutzerklärung erreichbar (Einwilligung, Retention, Rechte, EU)', dsPage.ok && dsHtml.includes('Einwilligung') && dsHtml.includes('Speicherdauer') && dsHtml.includes('Deine Rechte') && dsHtml.includes('Europäischen Union'));
 
   // Selbst-gehostete Fonts (ersetzen Google Fonts): CSS + woff2-Dateien erreichbar.
   const fontsCss = await fetch(BASE + '/fonts/fonts.css');
@@ -172,6 +203,14 @@ async function main() {
     body: JSON.stringify({ uuid: 'kein-uuid', firstName: 'X', lastName: 'Y' }),
   });
   check('Ungültige UUID → 400', badReg.status === 400);
+
+  // Anonyme Registrierung (kein Name) wird akzeptiert (Datenminimierung, DSGVO).
+  const anonReg = await fetch(BASE + `/api/e/${event.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: uuid(), firstName: '', lastName: '' }),
+  });
+  const anonData = await anonReg.json();
+  check('Anonyme Registrierung (ohne Namen) OK', anonReg.ok && anonData.user.firstName === '' && anonData.user.photoCount === 0);
 
   console.log('\n— Foto-Upload & Varianten —');
   async function uploadPhoto(u, { withFilter }) {
@@ -250,6 +289,30 @@ async function main() {
   check('Limit zählt pro User: B hat erst 1/2 → 201', withinB.status === 201);
   const overflowB = await uploadPhoto(userB, { withFilter: false });
   check('Upload über Limit (User B jetzt 2/2) → 409', overflowB.status === 409);
+
+  // Race-Test: Parallele Uploads desselben Users dürfen das Limit NICHT
+  // überschreiten (Check + Insert sind atomar via BEGIN IMMEDIATE).
+  const raceEvRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Race', eventDate: today, maxPhotosPerUser: 3 }),
+  });
+  const { event: raceEv } = await raceEvRes.json();
+  const raceUser = uuid();
+  await fetch(BASE + `/api/e/${raceEv.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: raceUser, firstName: 'R', lastName: 'ace' }),
+  });
+  const raceUploads = await Promise.all(Array.from({ length: 6 }, async () => {
+    const fd = new FormData();
+    fd.set('uuid', raceUser);
+    fd.set('filterId', 'none');
+    fd.set('takenWithFilter', '0');
+    fd.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+    return fetch(BASE + `/api/e/${raceEv.sessionId}/photos`, { method: 'POST', body: fd });
+  }));
+  const raceAccepted = raceUploads.filter(r => r.status === 201).length;
+  const raceCount = (await (await fetch(`${BASE}/api/e/${raceEv.sessionId}/state?uuid=${raceUser}`)).json()).user.photoCount;
+  check('Parallele Uploads überschreiten das Limit nicht (3/6 akzeptiert)', raceAccepted === 3 && raceCount === 3, `akzeptiert=${raceAccepted}, count=${raceCount}`);
 
   console.log('\n— Galerie-Freigabe & Sammel-Download —');
   const unlock = await fetch(BASE + `/api/admin/events/${event.id}`, {
@@ -357,6 +420,29 @@ async function main() {
   const exportBuf = Buffer.from(await exportRes.arrayBuffer());
   check('Admin-Export ZIP OK (Fotos + manifest + users)', exportRes.ok && countZipEntries(exportBuf) >= 5, `gefunden: ${countZipEntries(exportBuf)}`);
 
+  console.log('\n— Datenkonsistenz (saubere Datei-Struktur, keine Orphans) —');
+  const consEventRes = await fetch(BASE + '/api/admin/events', {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Konsistenz', eventDate: today }),
+  });
+  const { event: consEvent } = await consEventRes.json();
+  const consUser = uuid();
+  await fetch(BASE + `/api/e/${consEvent.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: consUser, firstName: 'Kons', lastName: 'istenz' }),
+  });
+  const consFd = new FormData();
+  consFd.set('uuid', consUser);
+  consFd.set('filterId', 'none');
+  consFd.set('takenWithFilter', '0');
+  consFd.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+  const consUp = await fetch(BASE + `/api/e/${consEvent.sessionId}/photos`, { method: 'POST', body: consFd });
+  check('Upload OK (Konsistenz-Event)', consUp.status === 201);
+  const consUserDir = path.join(DATA_DIR, 'photos', consEvent.sessionId, consUser);
+  const consFiles = (() => { try { return readdirSync(consUserDir); } catch { return []; } })();
+  // Ohne mitgesendeten Filter/Thumb: genau EINE Datei (das Original), nichts Halbfertiges.
+  check('Sauberer Datei-Satz (1 Original, keine Orphans)', consFiles.length === 1 && consFiles[0].includes('-original.'), consFiles.join(', '));
+
   console.log('\n— Bildkomprimierung konfigurierbar (Issue 1) —');
   const patchImg = await fetch(BASE + `/api/admin/events/${event.id}`, {
     method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
@@ -419,8 +505,34 @@ async function main() {
   const orgTryAdmin = await fetch(BASE + '/api/admin/events', { headers: orgAuth });
   check('Veranstalter-Token gilt nicht für Admin-API → 401', orgTryAdmin.status === 401);
 
-  const orgQr = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/qr.png?token=${encodeURIComponent(orgData.token)}`);
-  check('Veranstalter-QR-Code auslieferbar (?token=)', orgQr.ok && (await orgQr.arrayBuffer()).byteLength > 100);
+  const orgQr = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/qr.png`, { headers: orgAuth });
+  check('Veranstalter-QR-Code auslieferbar (Bearer-Header)', orgQr.ok && (await orgQr.arrayBuffer()).byteLength > 100);
+
+  // Foto-Löschung (nur Veranstalter): Gast lädt hoch, Veranstalter listet + löscht.
+  const orgPhotoUser = uuid();
+  await fetch(BASE + `/api/e/${orgEvent.sessionId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid: orgPhotoUser, firstName: 'Or', lastName: 'G' }),
+  });
+  const orgFd = new FormData();
+  orgFd.set('uuid', orgPhotoUser);
+  orgFd.set('filterId', 'none');
+  orgFd.set('takenWithFilter', '0');
+  orgFd.set('original', new Blob([JPEG], { type: 'image/jpeg' }), 'original.jpg');
+  const orgUp = await fetch(BASE + `/api/e/${orgEvent.sessionId}/photos`, { method: 'POST', body: orgFd });
+  check('Setup: Gast lädt Foto ins Org-Event (201)', orgUp.status === 201);
+  const orgPhotos = await (await fetch(BASE + `/api/organizer/events/${orgEvent.id}/photos`, { headers: orgAuth })).json();
+  check('Veranstalter listet Fotos (1)', orgPhotos.photos.length === 1 && !!orgPhotos.photos[0].thumbUrl, `n=${orgPhotos.photos.length}`);
+  if (orgPhotos.photos[0]) {
+    const orgThumb = await fetch(BASE + orgPhotos.photos[0].thumbUrl, { headers: orgAuth });
+    check('Veranstalter-Thumbnail auslieferbar (Bearer)', orgThumb.ok && (await orgThumb.arrayBuffer()).byteLength > 50);
+    const orgDel = await fetch(BASE + `/api/organizer/events/${orgEvent.id}/photos/${orgPhotos.photos[0].id}`, { method: 'DELETE', headers: orgAuth });
+    check('Veranstalter löscht Foto (200)', orgDel.status === 200);
+  }
+  const orgPhotosAfter = await (await fetch(BASE + `/api/organizer/events/${orgEvent.id}/photos`, { headers: orgAuth })).json();
+  check('Foto nach Löschung weg (0)', orgPhotosAfter.photos.length === 0, `n=${orgPhotosAfter.photos.length}`);
+  const orgFilesLeft = (() => { try { return readdirSync(path.join(DATA_DIR, 'photos', orgEvent.sessionId, orgPhotoUser)).length; } catch { return 0; } })();
+  check('Foto-Datei vom Datenträger entfernt', orgFilesLeft === 0, `übrig: ${orgFilesLeft}`);
 
   const revokeRes = await fetch(BASE + `/api/admin/keys/${accessKey.id}`, {
     method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
@@ -435,6 +547,23 @@ async function main() {
   check('Gesperrter Schlüssel → Login 401', orgLoginRevoked.status === 401);
   const orgEventsRevoked = await fetch(BASE + '/api/organizer/events', { headers: orgAuth });
   check('Gesperrter Schlüssel → bestehender Token abgelehnt', orgEventsRevoked.status === 401);
+
+  console.log('\n— Backup (DB + Fotos, konsistent) —');
+  {
+    const backupDir = path.join(root, 'data-test-backup-' + Date.now());
+    const r = spawnSync(process.execPath, [path.join(root, 'scripts/backup.mjs')], {
+      env: { ...process.env, TTS_DATA_DIR: DATA_DIR, TTS_BACKUP_DIR: backupDir, TTS_BACKUP_KEEP: '7' },
+      encoding: 'utf8',
+    });
+    check('Backup-Skript läuft (Exit 0)', r.status === 0, (r.stderr || '').slice(0, 200));
+    const backups = (() => { try { return readdirSync(backupDir).filter(f => f.startsWith('tts-backup-')); } catch { return []; } })();
+    check('Backup-Ordner erzeugt (1)', backups.length === 1, backups.join(', '));
+    if (backups[0]) {
+      const bfiles = new Set(readdirSync(path.join(backupDir, backups[0])));
+      check('Backup enthält DB + Fotos + Manifest', bfiles.has('throwtostay.db') && bfiles.has('photos') && bfiles.has('MANIFEST.txt'), [...bfiles].join(', '));
+    }
+    rmSync(backupDir, { recursive: true, force: true });
+  }
 
   console.log('\n— Rate-Limit (Login-Brute-Force-Schutz) —');
   // Am Ende, damit der ausgelöste 30s-Block die übrigen (bereits erledigten)

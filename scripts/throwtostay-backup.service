@@ -1,0 +1,15 @@
+[Unit]
+Description=ThrowToStay Backup (lokal: DB + Fotos)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# Als Service-User (liest die App-Daten). Bei Bedarf auf root ändern.
+User=throwtostay
+# MUSS exakt dem Datenverzeichnis der App entsprechen (s. systemd-Service der App).
+Environment=TTS_DATA_DIR=/opt/throwtostay/data
+# Ideal: andere Platte als TTS_DATA_DIR (sonst kein Schutz vor Platten-Defekt).
+Environment=TTS_BACKUP_DIR=/var/backups/throwtostay
+Environment=TTS_BACKUP_KEEP=7
+# Falls node nicht in /usr/bin liegt: absoluten Pfad verwenden (z. B. /usr/local/bin/node).
+ExecStart=/usr/bin/node /opt/throwtostay/scripts/backup.mjs

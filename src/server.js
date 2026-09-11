@@ -12,8 +12,11 @@
  * Umgebungsvariablen:
  *   TTS_PORT          Port (Standard 3742)
  *   TTS_DATA_DIR      Datenverzeichnis (Standard ./data)
- *   ADMIN_PASSWORD    Admin-Passwort (Standard "throwtostay-admin" – unbedingt ändern!)
+ *   ADMIN_PASSWORD    Admin-Passwort (PFLICHT, kein Standard – Server startet sonst nicht)
  *   TTS_HTTPS         "1" oder Start-Argument --https für HTTPS
+ *
+ *   WICHTIG: ADMIN_PASSWORD MUSS gesetzt sein (kein Standard-Passwort mehr).
+ *   Ohne die Variable startet der Server NICHT (Fail-Fast).
  */
 
 const path = require('path');
@@ -28,18 +31,28 @@ const util = require('./util');
 const { createPublicRouter } = require('./routes/public');
 const { createAdminRouter } = require('./routes/admin');
 const { createOrganizerRouter } = require('./routes/organizer');
+const { purgeExpiredEvents, sweepOrphans } = require('./routes/event-helpers');
 
 // ------------------------------------------------------------ Konfiguration
 
 const PORT = parseInt(process.env.TTS_PORT, 10) || 3742;
 const DATA_DIR = path.resolve(process.env.TTS_DATA_DIR || path.join(__dirname, '..', 'data'));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'throwtostay-admin';
 const USE_HTTPS = process.env.TTS_HTTPS === '1' || process.argv.includes('--https');
 
+// Sicherheit: kein Standard-Passwort. In Production MUSS ADMIN_PASSWORD explizit
+// gesetzt sein (Systemd-Service, .env oder Export). Sonst startet der Server nicht.
 if (!process.env.ADMIN_PASSWORD) {
-  console.warn('WARNUNG: ADMIN_PASSWORD ist nicht gesetzt – es wird das Standard-Passwort verwendet.');
+  console.error(
+    'FEHLER: Die Umgebungsvariable ADMIN_PASSWORD ist nicht gesetzt.\n'
+    + 'Setze sie auf ein starkes, eindeutiges Passwort, z. B.:\n'
+    + '  export ADMIN_PASSWORD=***\n'
+    + '(Systemd: Environment=ADMIN_PASSWORD=*** / .env-Datei).\n'
+    + 'Ein Standard-Passwort wird aus Sicherheitsgründen NICHT verwendet.'
+  );
+  process.exit(1);
 }
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // ------------------------------------------------------------ Datenbank
 
@@ -152,6 +165,29 @@ function ensureSelfSignedCert(dir) {
   console.log('Selbstsigniertes Zertifikat erzeugt:', certFile);
   return { certFile, keyFile };
 }
+
+// ------------------------------------------------------------ DSGVO-Retention
+// Hintergrund-Job (stündlich): löscht Events, deren Speicherdauer abgelaufen ist
+// (Event-Datum + retention_days). Nur bei retention_days > 0 (0 = manuell).
+// Ein Fehler bricht den Server NICHT ab – er wird protokolliert und beim
+// nächsten Lauf erneut versucht.
+const RETENTION_CHECK_MS = 60 * 60 * 1000; // stündlich
+const purgeTimer = setInterval(() => {
+  purgeExpiredEvents(db, DATA_DIR)
+    .then(n => { if (n > 0) console.log(`Retention: ${n} Event(s) automatisch gelöscht.`); })
+    .catch(err => console.error('Retention-Job fehlgeschlagen:', err.message));
+}, RETENTION_CHECK_MS);
+purgeTimer.unref();
+// Einmalig beim Start, damit abgelaufene Events auch nach Neustart weg sind.
+purgeExpiredEvents(db, DATA_DIR)
+  .then(n => { if (n > 0) console.log(`Retention: ${n} Event(s) beim Start automatisch gelöscht.`); })
+  .catch(err => console.error('Retention-Job (Start) fehlgeschlagen:', err.message));
+
+// Datenkonsistenz beim Start: verwaiste Dateien (z. B. nach einem Crash)
+// entfernen, bevor der Server Requests annimmt (keine Race-Kondition).
+sweepOrphans(db, DATA_DIR)
+  .then(n => { if (n > 0) console.log(`Konsistenz: ${n} verwaiste Datei(en) beim Start entfernt.`); })
+  .catch(err => console.error('Konsistenz-Sweep (Start) fehlgeschlagen:', err.message));
 
 // ------------------------------------------------------------ Start
 

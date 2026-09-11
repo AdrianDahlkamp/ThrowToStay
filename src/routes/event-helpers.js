@@ -32,6 +32,7 @@ function eventToJson(e) {
     maxImageSide: e.max_image_side,
     jpegQuality: e.jpeg_quality,
     hideFilterButtons: !!e.hide_filter_buttons,
+    retentionDays: e.retention_days ?? 30,
     galleryUnlockAt: e.gallery_unlock_at,
     galleryUnlocked: Date.now() >= Date.parse(e.gallery_unlock_at),
     createdAt: e.created_at,
@@ -100,12 +101,13 @@ function createEvent(db, body, createdBy = null) {
 
   const { maxImageSide, jpegQuality } = parseImageSettings(body);
   const hideFilterButtons = (body && body.hideFilterButtons) ? 1 : 0;
+  const retentionDays = parseRetentionDays(body);
 
   const id = util.generateId();
   db.prepare(
-    `INSERT INTO events (id, session_id, name, event_date, max_photos_per_user, gallery_unlock_at, created_at, created_by, max_image_side, jpeg_quality, hide_filter_buttons)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, util.generateSessionId(), name, date, maxPhotos, unlockAt, util.nowIso(), createdBy, maxImageSide, jpegQuality, hideFilterButtons);
+    `INSERT INTO events (id, session_id, name, event_date, max_photos_per_user, gallery_unlock_at, created_at, created_by, max_image_side, jpeg_quality, hide_filter_buttons, retention_days)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, util.generateSessionId(), name, date, maxPhotos, unlockAt, util.nowIso(), createdBy, maxImageSide, jpegQuality, hideFilterButtons, retentionDays);
 
   return getEventWithStats(db, id);
 }
@@ -121,6 +123,17 @@ function parseImageSettings(body) {
   jpegQuality = Math.min(Math.max(jpegQuality, 50), 100);
 
   return { maxImageSide, jpegQuality };
+}
+
+/**
+ * DSGVO-Retention validieren: nach wie vielen TAGEN NACH DEM EVENT-DATUM die
+ * Daten automatisch gelöscht werden. 0 = keine Auto-Löschung (manuell).
+ * Standard 30, Obergrenze 365.
+ */
+function parseRetentionDays(body) {
+  let days = parseInt((body || {}).retentionDays, 10);
+  if (!Number.isFinite(days)) days = 30;
+  return Math.min(Math.max(days, 0), 365);
 }
 
 /**
@@ -174,11 +187,39 @@ function updateEventFields(db, e, body) {
     ? (b.hideFilterButtons ? 1 : 0)
     : (e.hide_filter_buttons ? 1 : 0);
 
+  // DSGVO-Retention: nur aktualisieren, wenn explizit angeben (sonst Beibehalten).
+  const retentionDays = b.retentionDays !== undefined
+    ? parseRetentionDays(b)
+    : (e.retention_days ?? 30);
+
   db.prepare(
-    `UPDATE events SET name = ?, event_date = ?, max_photos_per_user = ?, gallery_unlock_at = ?, max_image_side = ?, jpeg_quality = ?, hide_filter_buttons = ? WHERE id = ?`
-  ).run(name, eventDate, maxPhotos, unlockAt, maxImageSide, jpegQuality, hideFilterButtons, e.id);
+    `UPDATE events SET name = ?, event_date = ?, max_photos_per_user = ?, gallery_unlock_at = ?, max_image_side = ?, jpeg_quality = ?, hide_filter_buttons = ?, retention_days = ? WHERE id = ?`
+  ).run(name, eventDate, maxPhotos, unlockAt, maxImageSide, jpegQuality, hideFilterButtons, retentionDays, e.id);
 
   return getEventWithStats(db, e.id);
+}
+
+/** Thumbnail-Namen aus dem Vollbild-Namen ableiten (Konvention, kein DB-Feld). */
+function thumbName(file) {
+  if (!file) return null;
+  const dot = file.lastIndexOf('.');
+  return dot > 0 ? file.slice(0, dot) + '-thumb' + file.slice(dot) : file + '-thumb.jpg';
+}
+
+/** Alle Dateinamen eines Fotos: Original + Thumb + Filter + Filter-Thumb. */
+function photoFileNames(photo) {
+  return [photo.original_file, thumbName(photo.original_file), photo.filtered_file, thumbName(photo.filtered_file)]
+    .filter(Boolean);
+}
+
+/** Löscht alle Dateien eines Fotos (Original/Thumb/Filter/Filter-Thumb) vom Datenträger. */
+async function deletePhotoFiles(dataDir, sessionId, uuid, photo) {
+  const dir = path.join(dataDir, 'photos', sessionId, uuid);
+  for (const f of photoFileNames(photo)) {
+    if (util.isSafeStoredFilename(f)) {
+      await fsp.unlink(path.join(dir, f)).catch(() => {});
+    }
+  }
 }
 
 /** Event samt Fotos/Dateien löschen (Users/Photos via CASCADE). */
@@ -201,6 +242,77 @@ async function deleteEventCascade(db, dataDir, e) {
   await fsp.rm(path.join(photosRoot, e.session_id), { recursive: true, force: true }).catch(() => {});
 }
 
+/**
+ * DSGVO-Retention: löscht Events, deren Speicherdauer abgelaufen ist.
+ * Ablaufzeitpunkt = Event-Datum (23:59 Uhr) + retention_days Tage.
+ * Nur Events mit retention_days > 0 (0 = keine Auto-Löschung, manuell).
+ * Gibt die Anzahl automatisch gelöschter Events zurück.
+ */
+async function purgeExpiredEvents(db, dataDir) {
+  const now = Date.now();
+  const rows = db.prepare(
+    'SELECT id, session_id, event_date, retention_days FROM events WHERE retention_days > 0'
+  ).all();
+  let deleted = 0;
+  for (const e of rows) {
+    const expiryMs = Date.parse(e.event_date + 'T23:59:59') + e.retention_days * 86400000;
+    if (now > expiryMs) {
+      await deleteEventCascade(db, dataDir, e);
+      deleted++;
+    }
+  }
+  return deleted;
+}
+
+/**
+ * Datenkonsistenz beim Start: entfernt „verwaiste" Dateien, die durch einen
+ * Crash (z. B. zwischen Datei-Write und DB-Insert) ohne DB-Zeile zurückbleiben.
+ *  1) data/tmp: komplett leeren (nur transient; Reste = abgebrochene Uploads).
+ *  2) data/photos: Dateien löschen, die keine zugehörige DB-Zeile haben
+ *     (Thumbnails werden per Konvention aus original_file abgeleitet).
+ * Läuft NUR beim Start (bevor der Server Requests annimmt) → keine Race-Kondition
+ * mit laufenden Uploads. Gibt die Anzahl gelöschter Orphan-Dateien zurück.
+ */
+async function sweepOrphans(db, dataDir) {
+  const photosRoot = path.join(dataDir, 'photos');
+  const tmpDir = path.join(dataDir, 'tmp');
+
+  // 1) data/tmp leeren.
+  try {
+    for (const f of await fsp.readdir(tmpDir)) await fsp.unlink(path.join(tmpDir, f)).catch(() => {});
+  } catch { /* tmp-Dir fehlt – egal */ }
+
+  // 2) Bekannte Dateinamen aus der DB (original + filtered) ableiten.
+  const known = new Set();
+  for (const r of db.prepare('SELECT original_file, filtered_file FROM photos').all()) {
+    if (r.original_file) known.add(r.original_file);
+    if (r.filtered_file) known.add(r.filtered_file);
+  }
+  // Thumbnails: Konvention "…-original.jpg" -> "…-original-thumb.jpg".
+  for (const f of [...known]) {
+    const dot = f.lastIndexOf('.');
+    if (dot > 0) known.add(f.slice(0, dot) + '-thumb' + f.slice(dot));
+  }
+
+  let removed = 0;
+  let sessions = [];
+  try { sessions = await fsp.readdir(photosRoot); } catch { return removed; }
+  for (const session of sessions) {
+    let uuidDirs = [];
+    try { uuidDirs = await fsp.readdir(path.join(photosRoot, session)); } catch { continue; }
+    for (const udir of uuidDirs) {
+      let files = [];
+      try { files = await fsp.readdir(path.join(photosRoot, session, udir)); } catch { continue; }
+      for (const f of files) {
+        if (known.has(f)) continue;
+        await fsp.unlink(path.join(photosRoot, session, udir, f)).catch(() => {});
+        removed++;
+      }
+    }
+  }
+  return removed;
+}
+
 module.exports = {
   eventToJson,
   getEventWithStats,
@@ -208,5 +320,9 @@ module.exports = {
   createEvent,
   updateEventFields,
   deleteEventCascade,
+  deletePhotoFiles,
+  thumbName,
   parseImageSettings,
+  purgeExpiredEvents,
+  sweepOrphans,
 };

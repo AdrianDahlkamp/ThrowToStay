@@ -20,6 +20,7 @@
   const parts = location.pathname.split('/').filter(Boolean);
   const SID = parts[0] === 'e' ? parts[1] : null;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const CAM_DEBUG = /[?&]camdebug=1\b/.test(location.search); // versteckte Kamera-Diagnose (Console)
 
   const $ = id => document.getElementById(id);
   const els = {
@@ -202,16 +203,39 @@
     stopCamera();
     els.camError.classList.remove('visible');
     try {
-      // WICHTIG: KEINE Auflösung (width/height) anfordern. Hohe 16:9-Werte
-      // (z. B. 1920×1440) treffen auf Multi-Kamera-Handys (Huawei P30/P40,
-      // Mate-20-Pro …) den nativen Modus des Telephoto-Sensors → Android wählt
-      // die Zoom-Kamera statt des Weitwinkels → extrem enger Blickwinkel, der
-      // sich per UI nicht rausszoomen lässt. Ohne Auflösungs-Hint liefert das
-      // System die Default-Kamera (Weitwinkel) mit normaler Feldweite.
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // KEINE Auflösung (width/height) anfordern – das triggert auf
+      // Multi-Kamera-Handys zusätzlich den falschen Sensor.
+      let stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: state.facing },
         audio: false,
       });
+
+      // Multi-Kamera-Android: facingMode:'environment' wird je nach
+      // Hersteller-HAL dem FALSCHEN Sensor zugewiesen – Huawei P30/P40/Mate
+      // → Telephoto, Samsung S10 → Ultrawide. Die Hauptkamera (Weitwinkel)
+      // erkennen wir an ihrem Flash: nur sie hat einen Blitz, Tele/Ultrawide
+      // nicht. Liegt der gewählte Track nicht auf der Hauptkamera (kein
+      // torch), stoppen wir ihn, proben die Rear-Kameras und wechseln zur
+      // flash-fähigen. Hat der gewählte Track Flash, IST er die Hauptkamera
+      // → behalten. Ein korrekt zugewiesenes Handy (z. B. Pixel, dessen
+      // Default-Kamera Flash hat) bleibt damit garantiert unangetastet.
+      if (state.facing === 'environment' && isAndroid()) {
+        const track = stream.getVideoTracks()[0];
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        const curId = track.getSettings().deviceId;
+        if (CAM_DEBUG) console.log('[TTS-CAM] Default-Track', curId, { facing: caps.facingMode, torch: caps.torch, focus: caps.focusMode, zoom: caps.zoom, w: caps.width && caps.width.max, h: caps.height && caps.height.max });
+        if (!caps.torch) {
+          stream.getTracks().forEach(t => t.stop());
+          const flashId = await findFlashRearCameraId(curId);
+          let next = null;
+          if (flashId) {
+            try { next = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: flashId } }, audio: false }); } catch (e) { if (CAM_DEBUG) console.log('[TTS-CAM] Flash-Kamera-Open fehlgeschlagen', flashId, e); next = null; }
+          }
+          stream = next || await navigator.mediaDevices.getUserMedia({ video: { facingMode: state.facing }, audio: false });
+          if (CAM_DEBUG) console.log('[TTS-CAM] gewechselt zu', flashId || '(Default neu)', stream.getVideoTracks()[0].getSettings().deviceId);
+        }
+      }
+
       state.stream = stream;
       els.video.srcObject = stream;
       try { await els.video.play(); } catch { /* autoplay fine */ }
@@ -224,6 +248,37 @@
           : 'Kein Kamerazugriff möglich (' + (err && err.name ? err.name : 'unbekannt') + '). Kamera von anderer App freigeben und erneut versuchen.';
       els.camError.classList.add('visible');
     }
+  }
+
+  /** True auf Android-Geräten – nur dort liegt das HAL-Zuweisungsproblem vor. */
+  function isAndroid() {
+    return /android/i.test(navigator.userAgent || '');
+  }
+
+  /** Sucht unter den Rear-Kameras die flash-fähige (Haupt-)Kamera und liefert
+   *  deren deviceId, falls vorhanden; sonst null. Die aktuelle Kamera
+   *  (currentDeviceId) wird übersprungen. Flash (torch) = Hauptkamera: nur
+   *  der Weitwinkel hat einen Blitz, Tele/Ultrawide nicht. Bei Fehlern → null
+   *  (kein Wechsel, kein Regression). */
+  async function findFlashRearCameraId(currentDeviceId) {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      for (const dev of devices.filter(d => d.kind === 'videoinput')) {
+        if (dev.deviceId === currentDeviceId) continue;
+        let s = null;
+        try {
+          s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: dev.deviceId } }, audio: false });
+          const t = s.getVideoTracks()[0];
+          const c = t.getCapabilities ? t.getCapabilities() : {};
+          const f = c.facingMode;
+          const isRear = f && (f === 'environment' || (Array.isArray(f) && f.includes('environment')));
+          if (CAM_DEBUG) console.log('[TTS-CAM] Probe', dev.deviceId, { facing: f, torch: c.torch, focus: c.focusMode, zoom: c.zoom, w: c.width && c.width.max, h: c.height && c.height.max });
+          if (isRear && c.torch) return dev.deviceId;
+        } catch (e) { if (CAM_DEBUG) console.log('[TTS-CAM] Kamera nicht lesbar', dev.deviceId, e); }
+        finally { if (s) s.getTracks().forEach(x => x.stop()); }
+      }
+      return null;
+    } catch { return null; }
   }
 
   function stopCamera() {

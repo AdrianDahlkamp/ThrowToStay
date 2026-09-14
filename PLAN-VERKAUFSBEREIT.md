@@ -18,13 +18,13 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 | Input-Validierung | ✅ | Name/Datum/Limits/Qualität alles geclamped, Datum-Regex, UUID-Validierung. |
 | Dateisicherheit | ✅ | Temp-Dir, zufällige Namen, Magic-Bytes (nur JPEG/PNG/WEBP), Path-Traversal-Schutz. |
 | Krypto/Secrets | ✅ | Secret 32 Bytes (0600), HMAC-Tokens mit Expiry. `ADMIN_PASSWORD` Fail-Fast (kein Default). |
-| TLS | ✅ | Zoraxy terminiert TLS; `trust proxy` nur für Zoraxy-IP. ⚠️ HSTS nicht gesetzt. |
+| TLS | ✅ | Zoraxy terminiert TLS; `trust proxy` nur für Zoraxy-IP. ✅ HSTS aktiv (max-age=31536000). |
 | Deps | ✅ | 5 Dependencies, schlank, aktuell (Node 22). |
 | XSS/SQLi/Leak | ✅ | CSP (keine Inline-Scripts), `frame-ancestors 'none'`, Prepared Statements, Fehlerhandler ohne Leaks. |
 
 **Sicherheits-Lücken (priorisiert):**
 1. ✅ `ADMIN_PASSWORD`-Default **entfernt** (Fail-Fast: Server startet ohne die Variable NICHT; `.env` + `.env.example`).
-2. ⬜ **HSTS** auf Zoraxy setzen (prüfen, falls nicht da).
+2. ✅ **HSTS** auf Zoraxy: aktiv (2026-09-11 verifiziert, max-age=31536000).
 3. ✅ `?token=` in Query-String **eliminiert** → Bearer-only (Admin + Organizer); neuer Smoke-Test `?token=`→401.
 
 ### 1.2 Datenschutz (DSGVO) — insgesamt **die größte Lücke**
@@ -155,3 +155,31 @@ Diese Datei ist ein lebender Fahrplan. Status: ⬜ offen · 🔶 in Arbeit · �
 4. **`?token=`**: **so sicher wie möglich** → eliminieren (Bearer + client-seitiger QR + fetch-Downloads).
 5. **Backup**: anfangs **lokal** (nightly), später **Cloud** für Production. **Proxmox-HA** für den Server (eigener Track).
 6. **Reihenfolge**: **Sicherheit zuerst** (Server ist extern erreichbar, aktuell nur Freunde/Bekannte).
+
+---
+
+## 5. Post-Go-Live-Fixes
+
+### 5.1 Kamera: Hauptkamera-Auswahl auf Multi-Kamera-Android 🔶 (deployed, am P30 Pro zu verifizieren)
+- **Problem:** Auf Multi-Kamera-Handys (Huawei P30 Pro, Mate 20/30, Samsung S10, …) weist der
+  Android-Camera-HAL `facingMode:'environment'` dem **falschen Sensor** zu — P30 Pro → **Telephoto**
+  (extrem nah rangezoomt, nicht rausszoombar). Pixel & iPhone liefern korrekt den Weitwinkel.
+  Ursache = **vendor-spezifische HAL-Konfiguration** (welcher Sensor der „environment"-Default ist),
+  **kein** allgemeines Multi-Kamera-Problem (deshalb funktioniert der Pixel).
+  Auflösungs-Hints ändern nichts (Fix `dac247c` half nicht — Ursache ist die Sensor-Auswahl).
+- **Fix** (develop `9307bf7`, Production `3574f0b`): `startCamera()` prüft den gewählten Track nach
+  dem Open. **Hat er Flash (`torch`) → ist er die Hauptkamera → behalten** (Pixel bleibt garantiert
+  unangetastet, da dessen Default-Kamera Flash hat → schneller Pfad ohne Probung).
+  **Ohne Flash** (P30-Pro-Tele) → Rear-Kameras proben und zur **flash-fähigen** (Hauptkamera)
+  wechseln; keine gefunden → Default neu. Nur Flash = Hauptkamera (nur der Weitwinkel hat den
+  Blitz, Tele/Ultrawide nicht) → keine Fehlauswahl, kein Regression.
+  Recherche-Basis: [8thwall/web#108](https://github.com/8thwall/web/issues/108) (Huawei-UA-Override),
+  [react-webcam#341](https://github.com/mozmorris/react-webcam/issues/341) (P30 Pro = Telephoto),
+  [SO #59636464](https://stackoverflow.com/questions/59636464) (torch = Hauptkamera-Diskriminator).
+- **Diagnose:** versteckte Kamera-Diagnose per `?camdebug=1` (loggt nach dem Open die echten
+  Capabilities: `facingMode`, `torch`, `focusMode`, `zoom`, Auflösung). Falls der P30 Pro `torch`
+  **nicht** exponiert: Seite mit `?camdebug=1` öffnen, Console-Logs mitschicken → dann weitere
+  Heuristik ergänzen (z. B. `focusMode`/Auflösung).
+- **Status:** 🟢 in Production (`3574f0b`, SHA-256 der ausgelieferten event.js verifiziert).
+  **Zu tun:** Verifikation am P30 Pro (Weitwinkel statt Telephoto, Zoom ab 1,0×) + Regression am
+  Pixel/iPhone (bleibt Weitwinkel, keine Änderung).
